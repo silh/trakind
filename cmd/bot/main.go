@@ -14,8 +14,8 @@ import (
 	"time"
 )
 
-// IndApiPath TODO only documents pick up is supported for 3 people.
-const IndApiPath = "https://oap.ind.nl/oap/api/desks/%s/slots/?productKey=DOC&persons=3"
+// INDApiPath TODO only documents pick up is supported for 3 people.
+const INDApiPath = "https://oap.ind.nl/oap/api/desks/%s/slots/?productKey=DOC&persons=3"
 
 var log *zap.SugaredLogger
 
@@ -27,14 +27,7 @@ var locationToChats = map[string]sets.Set[int64]{
 	"DB": sets.NewConcurrent[int64](),
 }
 
-// optionFunc wraps a func, so it satisfies the Option interface.
-type optionFunc func(*zap.Logger)
-
-func (f optionFunc) apply(log *zap.Logger) {
-	f(log)
-}
-
-var count int // TODO this should survive restarts. And everything else as well :D
+var count int // TODO this should survive restarts. And everything else should as well :D
 
 func init() {
 	config := zap.NewDevelopmentConfig()
@@ -47,7 +40,8 @@ func init() {
 	log = logger.Sugar()
 }
 
-type Window struct {
+// TimeWindow describes one time open window in IND schedule.
+type TimeWindow struct {
 	Key       string `json:"key"`
 	Date      string `json:"date"`
 	StartTime string `json:"startTime"`
@@ -55,9 +49,10 @@ type Window struct {
 	Parts     int    `json:"parts"`
 }
 
+// DatesResponse is full response received from API.
 type DatesResponse struct {
-	Status string   `json:"status"`
-	Data   []Window `json:"data"`
+	Status string       `json:"status"`
+	Data   []TimeWindow `json:"data"`
 }
 
 func main() {
@@ -109,15 +104,17 @@ func main() {
 				defer lock.Unlock()
 				if _, ok := locationToChats[location]; ok {
 					locationToChats[location].Add(chatID)
-					log.Infow("New follower", "location", location)
-				} else {
-					_, err := botAPI.Send(bot.NewMessage(
-						chatID,
-						"Unsupported location - "+location,
-					))
+					_, err := botAPI.Send(bot.NewMessage(chatID, "You will now get a notification when there is "+
+						"an open time window found for the location "+location))
 					if err != nil {
-						log.Warnw("Failed to notify about incorrect location", "err", err)
+						log.Warnw("Failed to notify about subscription", "err", err)
 					}
+					log.Infow("New follower", "location", location)
+					return
+				}
+				_, err := botAPI.Send(bot.NewMessage(chatID, "Unsupported location - "+location))
+				if err != nil {
+					log.Warnw("Failed to notify about incorrect location", "err", err)
 				}
 			}()
 		} else if command == "stoptrack" {
@@ -128,6 +125,10 @@ func main() {
 					locationToChats[k].Remove(chatID)
 				}
 			}()
+			_, err := botAPI.Send(bot.NewMessage(chatID, "You won't receive new notifications anymore."))
+			if err != nil {
+				log.Warnw("Failed to notify about unsubscription", "err", err)
+			}
 		} else if command == "start" {
 			count++
 			log.Info("New user", "count", count)
@@ -159,7 +160,7 @@ func registerCommands(botAPI *bot.BotAPI) {
 }
 
 func track(location string, botAPI *bot.BotAPI) {
-	path := fmt.Sprintf(IndApiPath, location)
+	path := fmt.Sprintf(INDApiPath, location)
 	ticker := time.NewTicker(10 * time.Second)
 	for {
 		<-ticker.C
@@ -178,7 +179,7 @@ func trackOnce(botAPI *bot.BotAPI, path, location string) {
 	defer resp.Body.Close()
 	// response has prefix )]}',\n
 	// we need to discard that
-	var n int64 = 6 // response has prefix )]}',\n
+	var n int64 = 6
 	_, err = io.CopyN(io.Discard, resp.Body, n)
 	if err != nil {
 		log.Warnw("Error reading first bytes", "err", err)

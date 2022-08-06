@@ -1,3 +1,4 @@
 /.idea
 .env
 /bot
+instance_name

@@ -33,6 +33,7 @@ var locationToName = map[string]string{
 }
 
 var count int // TODO this should survive restarts. And everything else should as well :D
+var interval = 1 * time.Minute
 
 func init() {
 	config := zap.NewDevelopmentConfig()
@@ -63,8 +64,10 @@ type DatesResponse struct {
 func main() {
 	apiKey := os.Getenv("TELEGRAM_API_KEY")
 	if apiKey == "" {
-		log.Fatal("TELEGRAM_API_KEY must be provided")
+		log.Fatal("TELEGRAM_API_KEY env variable must be set")
 	}
+	updateIntervalFromEnv()
+
 	botAPI, err := bot.NewBotAPI(apiKey)
 	if err != nil {
 		log.Fatalw("Failed to create new bot API", "err", err)
@@ -161,7 +164,7 @@ func registerCommands(botAPI *bot.BotAPI) {
 
 func track(location string, botAPI *bot.BotAPI) {
 	path := fmt.Sprintf(INDApiPath, location)
-	ticker := time.NewTicker(10 * time.Second)
+	ticker := time.NewTicker(interval)
 	for {
 		<-ticker.C
 		trackOnce(botAPI, path, location)
@@ -205,5 +208,17 @@ func trackOnce(botAPI *bot.BotAPI, path, location string) {
 				log.Warnw("Failed to send notification", "chat", chatID)
 			}
 		})
+	}
+}
+
+func updateIntervalFromEnv() {
+	intervalFromEnv := os.Getenv("UPDATE_INTERVAL")
+	if intervalFromEnv != "" {
+		duration, err := time.ParseDuration(intervalFromEnv)
+		if err == nil {
+			interval = duration
+		} else {
+			log.Warnw("Could not parse duration from env UPDATE_INTERVAL", "err", err)
+		}
 	}
 }

@@ -10,7 +10,6 @@ import (
 	"os"
 	"parseind/sets"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -19,7 +18,6 @@ const INDApiPath = "https://oap.ind.nl/oap/api/desks/%s/slots/?productKey=DOC&pe
 
 var log *zap.SugaredLogger
 
-var lock sync.RWMutex
 var locationToChats = map[string]sets.Set[int64]{
 	"AM": sets.NewConcurrent[int64](),
 	"DH": sets.NewConcurrent[int64](),
@@ -100,8 +98,6 @@ func main() {
 			}
 			location := args[0]
 			func() {
-				lock.Lock()
-				defer lock.Unlock()
 				if _, ok := locationToChats[location]; ok {
 					locationToChats[location].Add(chatID)
 					_, err := botAPI.Send(bot.NewMessage(chatID, "You will now get a notification when there is "+
@@ -118,13 +114,9 @@ func main() {
 				}
 			}()
 		} else if command == "stoptrack" {
-			func() {
-				lock.Lock()
-				defer lock.Unlock()
-				for k := range locationToChats {
-					locationToChats[k].Remove(chatID)
-				}
-			}()
+			for k := range locationToChats {
+				locationToChats[k].Remove(chatID)
+			}
 			_, err := botAPI.Send(bot.NewMessage(chatID, "You won't receive new notifications anymore."))
 			if err != nil {
 				log.Warnw("Failed to notify about unsubscription", "err", err)
@@ -192,8 +184,6 @@ func trackOnce(botAPI *bot.BotAPI, path, location string) {
 	}
 	if len(datesResponse.Data) > 0 {
 		log.Debugw("Date available!", "first", datesResponse.Data[0])
-		lock.RLock()
-		defer lock.RUnlock()
 		locationToChats[location].ForEach(func(chatID int64) {
 			_, err := botAPI.Send(bot.NewMessage(chatID, "Hey, you have a new available slot!"))
 			if err != nil {

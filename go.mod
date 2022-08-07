@@ -1,4 +1,4 @@
-module parseind
+module github.com/silh/trakind
 
 go 1.18
 

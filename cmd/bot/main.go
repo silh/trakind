@@ -25,6 +25,13 @@ var locationToChats = map[string]sets.Set[int64]{
 	"DB": sets.NewConcurrent[int64](),
 }
 
+var locationToName = map[string]string{
+	"AM": "IND Amsterdam",
+	"DH": "IND Den Haag",
+	"ZW": "IND Zwolle",
+	"DB": "IND Den Dosch",
+}
+
 var count int // TODO this should survive restarts. And everything else should as well :D
 
 func init() {
@@ -96,11 +103,11 @@ func main() {
 				}
 				continue
 			}
-			location := args[0]
+			location := strings.ToUpper(args[0])
 			if _, ok := locationToChats[location]; ok {
 				locationToChats[location].Add(chatID)
 				_, err := botAPI.Send(bot.NewMessage(chatID, "You will now get a notification when there is "+
-					"an open time window found for the location "+location))
+					"an open time window found for the location "+locationToName[location]))
 				if err != nil {
 					log.Warnw("Failed to notify about subscription", "err", err)
 				}
@@ -115,7 +122,7 @@ func main() {
 			for k := range locationToChats {
 				locationToChats[k].Remove(chatID)
 			}
-			_, err := botAPI.Send(bot.NewMessage(chatID, "You won't receive new notifications anymore."))
+			_, err := botAPI.Send(bot.NewMessage(chatID, "You won't receive new notifications."))
 			if err != nil {
 				log.Warnw("Failed to notify about unsubscription", "err", err)
 			}

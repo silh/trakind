@@ -97,22 +97,20 @@ func main() {
 				continue
 			}
 			location := args[0]
-			func() {
-				if _, ok := locationToChats[location]; ok {
-					locationToChats[location].Add(chatID)
-					_, err := botAPI.Send(bot.NewMessage(chatID, "You will now get a notification when there is "+
-						"an open time window found for the location "+location))
-					if err != nil {
-						log.Warnw("Failed to notify about subscription", "err", err)
-					}
-					log.Infow("New follower", "location", location)
-					return
-				}
-				_, err := botAPI.Send(bot.NewMessage(chatID, "Unsupported location - "+location))
+			if _, ok := locationToChats[location]; ok {
+				locationToChats[location].Add(chatID)
+				_, err := botAPI.Send(bot.NewMessage(chatID, "You will now get a notification when there is "+
+					"an open time window found for the location "+location))
 				if err != nil {
-					log.Warnw("Failed to notify about incorrect location", "err", err)
+					log.Warnw("Failed to notify about subscription", "err", err)
 				}
-			}()
+				log.Infow("New follower", "location", location)
+				continue
+			}
+			_, err := botAPI.Send(bot.NewMessage(chatID, "Unsupported location - "+location))
+			if err != nil {
+				log.Warnw("Failed to notify about incorrect location", "err", err)
+			}
 		} else if command == "stoptrack" {
 			for k := range locationToChats {
 				locationToChats[k].Remove(chatID)
@@ -124,6 +122,9 @@ func main() {
 		} else if command == "start" {
 			count++
 			log.Info("New user", "count", count)
+		} else if command == "stop" {
+			count--
+			log.Info("User left", "count", count)
 		}
 	}
 }
@@ -183,9 +184,16 @@ func trackOnce(botAPI *bot.BotAPI, path, location string) {
 		return
 	}
 	if len(datesResponse.Data) > 0 {
-		log.Debugw("Date available!", "first", datesResponse.Data[0])
+		firstAvailableWindow := datesResponse.Data[0]
+		log.Debugw("Windows available!", "count", len(datesResponse.Data))
+		msgText := fmt.Sprintf(
+			"A slot is available on %s at %s and %d more.",
+			firstAvailableWindow.Date,
+			firstAvailableWindow.StartTime,
+			len(datesResponse.Data)-1,
+		)
 		locationToChats[location].ForEach(func(chatID int64) {
-			_, err := botAPI.Send(bot.NewMessage(chatID, "Hey, you have a new available slot!"))
+			_, err := botAPI.Send(bot.NewMessage(chatID, msgText))
 			if err != nil {
 				log.Warnw("Failed to send notification", "chat", chatID)
 			}

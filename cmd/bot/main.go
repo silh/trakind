@@ -1,50 +1,27 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
-	bot "github.com/go-telegram-bot-api/telegram-bot-api/v5"
-	"github.com/silh/trakind/sets"
-	"go.uber.org/zap"
+	tg "github.com/go-telegram-bot-api/telegram-bot-api/v5"
+	"github.com/silh/trakind/pkg/bots"
+	"github.com/silh/trakind/pkg/db"
+	"github.com/silh/trakind/pkg/logger"
 	"io"
 	"net/http"
 	"os"
-	"strings"
+	"os/signal"
+	"syscall"
 	"time"
 )
 
 // INDApiPath TODO only documents pick up is supported for 3 people.
 const INDApiPath = "https://oap.ind.nl/oap/api/desks/%s/slots/?productKey=DOC&persons=3"
 
-var log *zap.SugaredLogger
+var log = logger.Logger()
 
-var locationToChats = map[string]sets.Set[int64]{
-	"AM": sets.NewConcurrent[int64](),
-	"DH": sets.NewConcurrent[int64](),
-	"ZW": sets.NewConcurrent[int64](),
-	"DB": sets.NewConcurrent[int64](),
-}
-
-var locationToName = map[string]string{
-	"AM": "IND Amsterdam",
-	"DH": "IND Den Haag",
-	"ZW": "IND Zwolle",
-	"DB": "IND Den Dosch",
-}
-
-var count int // TODO this should survive restarts. And everything else should as well :D
 var interval = 1 * time.Minute
-
-func init() {
-	config := zap.NewDevelopmentConfig()
-	config.Encoding = "console"
-	config.Level = zap.NewAtomicLevelAt(zap.InfoLevel)
-	logger, err := config.Build()
-	if err != nil {
-		zap.S().Fatalw("Failed to create logger", "err", err)
-	}
-	log = logger.Sugar()
-}
 
 // TimeWindow describes one time open window in IND schedule.
 type TimeWindow struct {
@@ -66,103 +43,30 @@ func main() {
 	if apiKey == "" {
 		log.Fatal("TELEGRAM_API_KEY env variable must be set")
 	}
-	updateIntervalFromEnv()
+	setUpdateIntervalFromEnv()
 
-	botAPI, err := bot.NewBotAPI(apiKey)
+	bot, err := bots.New(apiKey)
 	if err != nil {
 		log.Fatalw("Failed to create new bot API", "err", err)
 	}
-	registerCommands(botAPI)
-	u := bot.NewUpdate(0)
-	u.Timeout = 60
-	updatesC := botAPI.GetUpdatesChan(u)
+
+	ctx := context.Background()
+	ctx, stop := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+	go func() {
+		<-ctx.Done()
+		bot.Stop()
+	}()
 
 	// Start tracking all available locations
-	for k := range locationToChats {
-		go track(k, botAPI)
+	for k := range db.LocationToChats {
+		go track(k, bot)
 	}
-
-	// TODO improve that...
-	for update := range updatesC {
-		msg := update.Message
-		if msg == nil || !msg.IsCommand() {
-			continue
-		}
-		chatID := update.FromChat().ID
-		log := log.With("chat", chatID)
-		log.Infow("New command", "resp", msg.Text)
-		command := msg.Command()
-		args := strings.Split(msg.CommandArguments(), " ")
-		if command == "track" {
-			if len(args) == 0 {
-				// TODO track all????
-				log.Warn("Requested to track all locations. Not supported")
-				_, err := botAPI.Send(bot.NewMessage(
-					chatID,
-					"Tracking all locations is not supported at the moment, please specify a location to track",
-				))
-				if err != nil {
-					log.Warnw("Failed to send warning", "err", err)
-				}
-				continue
-			}
-			location := strings.ToUpper(args[0])
-			if _, ok := locationToChats[location]; ok {
-				locationToChats[location].Add(chatID)
-				_, err := botAPI.Send(bot.NewMessage(chatID, "You will now get a notification when there is "+
-					"an open time window found for the location "+locationToName[location]))
-				if err != nil {
-					log.Warnw("Failed to notify about subscription", "err", err)
-				}
-				log.Infow("New follower", "location", location)
-				continue
-			}
-			_, err := botAPI.Send(bot.NewMessage(chatID, "Unsupported location - "+location))
-			if err != nil {
-				log.Warnw("Failed to notify about incorrect location", "err", err)
-			}
-		} else if command == "stoptrack" {
-			for k := range locationToChats {
-				locationToChats[k].Remove(chatID)
-			}
-			_, err := botAPI.Send(bot.NewMessage(chatID, "You won't receive new notifications."))
-			if err != nil {
-				log.Warnw("Failed to notify about unsubscription", "err", err)
-			}
-		} else if command == "start" {
-			count++
-			log.Info("New user", "count", count)
-		} else if command == "stop" {
-			count--
-			log.Info("User left", "count", count)
-		}
-	}
+	bot.Run() // blocks until done
+	log.Info("Exiting")
 }
 
-func registerCommands(botAPI *bot.BotAPI) {
-	commands := bot.NewSetMyCommands(
-		bot.BotCommand{
-			Command: "track",
-			Description: "Specify IND location to track for available timeslots - AM (for Amsterdam), " +
-				"DH (for Den Haag), ZW (for Zwolle), DB (for Den Dosch). " +
-				"Optionally you can specify the date as DD.MM.YYYY, then you will only get notified about slots before or on that date",
-		},
-		bot.BotCommand{
-			Command:     "stoptrack",
-			Description: "Stops all tracking",
-		},
-	)
-	resp, err := botAPI.Request(commands)
-	if err != nil {
-		log.Fatalw("Failed to register commands", "err", err)
-	}
-	if !resp.Ok {
-		log.Fatalw("Failed to register commands", "code", resp.ErrorCode, "desc", resp.Description)
-	}
-	log.Infow("Command registration successful")
-}
-
-func track(location string, botAPI *bot.BotAPI) {
+func track(location string, botAPI *bots.Bot) {
 	path := fmt.Sprintf(INDApiPath, location)
 	ticker := time.NewTicker(interval)
 	for {
@@ -172,7 +76,7 @@ func track(location string, botAPI *bot.BotAPI) {
 	}
 }
 
-func trackOnce(botAPI *bot.BotAPI, path, location string) {
+func trackOnce(bot *bots.Bot, path, location string) {
 	log := log.With("location", location)
 	resp, err := http.Get(path)
 	if err != nil {
@@ -197,13 +101,14 @@ func trackOnce(botAPI *bot.BotAPI, path, location string) {
 		firstAvailableWindow := datesResponse.Data[0]
 		log.Debugw("Windows available!", "count", len(datesResponse.Data))
 		msgText := fmt.Sprintf(
-			"A slot is available on %s at %s and %d more.",
+			"A slot is available at %s on %s at %s and %d more.",
+			db.LocationToName[location],
 			firstAvailableWindow.Date,
 			firstAvailableWindow.StartTime,
 			len(datesResponse.Data)-1,
 		)
-		locationToChats[location].ForEach(func(chatID int64) {
-			_, err := botAPI.Send(bot.NewMessage(chatID, msgText))
+		db.LocationToChats[location].ForEach(func(chatID int64) {
+			_, err := bot.API.Send(tg.NewMessage(chatID, msgText)) // TODO Should we delete a subscriber after update?
 			if err != nil {
 				log.Warnw("Failed to send notification", "chat", chatID)
 			}
@@ -211,7 +116,7 @@ func trackOnce(botAPI *bot.BotAPI, path, location string) {
 	}
 }
 
-func updateIntervalFromEnv() {
+func setUpdateIntervalFromEnv() {
 	intervalFromEnv := os.Getenv("UPDATE_INTERVAL")
 	if intervalFromEnv != "" {
 		duration, err := time.ParseDuration(intervalFromEnv)

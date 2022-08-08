@@ -1,26 +1,25 @@
 package sets
 
 import (
-	"golang.org/x/exp/constraints"
 	"sync"
 )
 
 var empty = struct{}{}
 
-type Action[F constraints.Ordered] func(item F)
+type Action[F comparable] func(item F)
 
-type Set[F constraints.Ordered] interface {
+type Set[F comparable] interface {
 	Add(item F)
 	Remove(item F)
 	Contains(item F) bool
 	ForEach(action Action[F])
 }
 
-type HashSet[F constraints.Ordered] struct {
+type HashSet[F comparable] struct {
 	container map[F]struct{}
 }
 
-func New[F constraints.Ordered]() *HashSet[F] {
+func New[F comparable]() *HashSet[F] {
 	return &HashSet[F]{container: make(map[F]struct{})}
 }
 
@@ -43,12 +42,12 @@ func (s *HashSet[F]) ForEach(action Action[F]) {
 	}
 }
 
-type ConcurrentHashSet[F constraints.Ordered] struct {
+type ConcurrentHashSet[F comparable] struct {
 	set  Set[F]
 	lock sync.RWMutex
 }
 
-func NewConcurrent[F constraints.Ordered]() *ConcurrentHashSet[F] {
+func NewConcurrent[F comparable]() *ConcurrentHashSet[F] {
 	return &ConcurrentHashSet[F]{
 		set:  New[F](),
 		lock: sync.RWMutex{},

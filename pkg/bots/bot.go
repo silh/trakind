@@ -3,16 +3,17 @@ package bots
 import (
 	tg "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/silh/trakind/pkg/db"
+	"github.com/silh/trakind/pkg/domain"
 	"github.com/silh/trakind/pkg/logger"
+	"go.uber.org/zap"
 	"strings"
+	"time"
 )
 
 var log = logger.Logger()
 
-type ChatID int64
-
 type SubscribersDB interface {
-	Add(location string, chatID ChatID)
+	Add(location string, chatID domain.ChatID)
 }
 
 type Bot struct {
@@ -54,38 +55,70 @@ func (b *Bot) Run() {
 			if len(args) == 0 {
 				// TODO track all????
 				log.Warn("Requested to track all locations. Not supported")
-				_, err := b.API.Send(tg.NewMessage(
-					chatID,
-					"Tracking all locations is not supported at the moment, please specify a location to track",
-				))
-				if err != nil {
-					log.Warnw("Failed to send warning", "err", err)
-				}
+				b.sendAndForget(
+					tg.NewMessage(
+						chatID,
+						"Tracking all locations is not supported at the moment, please specify a location to track",
+					),
+					"warning",
+					log,
+				)
 				continue
 			}
 			location := strings.ToUpper(args[0])
 			if _, ok := db.LocationToChats[location]; ok {
-				db.LocationToChats[location].Add(chatID)
-				_, err := b.API.Send(tg.NewMessage(chatID, "You will now get a notification when there is "+
-					"an open time window found for the location "+db.LocationToName[location]))
-				if err != nil {
-					log.Warnw("Failed to notify about subscription", "err", err)
+				subscription := domain.Subscription{
+					ChatID: domain.ChatID(chatID),
 				}
+				if len(args) > 1 {
+					date, err := time.Parse(domain.TimeFormat, args[1])
+					if err != nil {
+						b.sendAndForget(
+							tg.NewMessage(chatID, "Date has incorrect format, please use YYYY-MM-DD"),
+							"message about incorrect date",
+							log,
+						)
+						continue
+					}
+					subscription.TrackBefore = domain.WindowDate(date)
+				}
+				db.LocationToChats[location].Add(subscription)
+				msgText := "You will now get a notification when an open time window" +
+					" found for the location " + db.LocationToName[location]
+				if (subscription.TrackBefore != domain.WindowDate{}) {
+					msgText += " that happens before " + subscription.TrackBefore.String()
+				}
+				b.sendAndForget(
+					tg.NewMessage(chatID, msgText),
+					"subsription notification",
+					log,
+				)
 				log.Infow("New follower", "location", location)
 				continue
 			}
-			_, err := b.API.Send(tg.NewMessage(chatID, "Unsupported location - "+location))
-			if err != nil {
-				log.Warnw("Failed to notify about incorrect location", "err", err)
-			}
+			b.sendAndForget(
+				tg.NewMessage(chatID, "Unsupported location - "+location),
+				"incorrect location message",
+				log,
+			)
 		} else if command == "stoptrack" {
 			for k := range db.LocationToChats {
-				db.LocationToChats[k].Remove(chatID)
+				// TODO this should be improved
+				toDelete := make([]domain.Subscription, 0)
+				db.LocationToChats[k].ForEach(func(item domain.Subscription) {
+					if item.ChatID == domain.ChatID(chatID) {
+						toDelete = append(toDelete, item)
+					}
+				})
+				for _, subscription := range toDelete {
+					db.LocationToChats[k].Remove(subscription)
+				}
 			}
-			_, err := b.API.Send(tg.NewMessage(chatID, "You won't receive new notifications."))
-			if err != nil {
-				log.Warnw("Failed to notify about unsubscription", "err", err)
-			}
+			b.sendAndForget(
+				tg.NewMessage(chatID, "You won't receive new notifications."),
+				"unsubsribption notification",
+				log,
+			)
 		} else if command == "start" {
 			b.openChatCount++
 			log.Info("New user", "count", b.openChatCount)
@@ -101,13 +134,15 @@ func (b *Bot) Stop() {
 	b.API.StopReceivingUpdates()
 }
 
+// registerCommands registers available bot commands.
 func (b *Bot) registerCommands() {
 	commands := tg.NewSetMyCommands(
 		tg.BotCommand{
 			Command: "track",
 			Description: "Specify IND location to track for available timeslots - AM (for Amsterdam), " +
 				"DH (for Den Haag), ZW (for Zwolle), DB (for Den Dosch). " +
-				"Optionally you can specify the date as DD.MM.YYYY, then you will only get notified about slots before or on that date",
+				"Optionally you can specify the date as YYYY-MM-DD, then you will only get notified about " +
+				"time windows before that date.",
 		},
 		tg.BotCommand{
 			Command:     "stoptrack",
@@ -122,4 +157,11 @@ func (b *Bot) registerCommands() {
 		log.Fatalw("Failed to register commands", "code", resp.ErrorCode, "desc", resp.Description)
 	}
 	log.Infow("Commands registration successful")
+}
+
+// sendAndForget sends message and logs error if it occurs.
+func (b *Bot) sendAndForget(msg tg.MessageConfig, msgType string, log *zap.SugaredLogger) {
+	if _, err := b.API.Send(msg); err != nil {
+		log.Warnw("Failed to send "+msgType, "err", err)
+	}
 }

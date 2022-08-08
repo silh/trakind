@@ -33,6 +33,12 @@ Where:
 - zw: IND Zwolle
 - db: IND Den Bosch
 
+Optionally if you are only interested in time windows before particular date you can specify it in YYYY-MM-DD format.
+For example, if you are interested in time windows in Amsterdam before November 1st 2022:
+```
+/track am 2022-11-01
+```
+
 After that you will receive notifications about open windows with mention of the first available window and number of
 other possible options. Notifications do not start after the first one and might repeat the same information.
 

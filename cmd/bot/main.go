@@ -7,6 +7,7 @@ import (
 	tg "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/silh/trakind/pkg/bots"
 	"github.com/silh/trakind/pkg/db"
+	"github.com/silh/trakind/pkg/domain"
 	"github.com/silh/trakind/pkg/logger"
 	"io"
 	"net/http"
@@ -23,21 +24,6 @@ const INDApiPath = "https://oap.ind.nl/oap/api/desks/%s/slots/?productKey=DOC&pe
 var log = logger.Logger()
 
 var interval = 1 * time.Minute
-
-// TimeWindow describes one time open window in IND schedule.
-type TimeWindow struct {
-	Key       string `json:"key"`
-	Date      string `json:"date"`
-	StartTime string `json:"startTime"`
-	EndTime   string `json:"endTime"`
-	Parts     int    `json:"parts"`
-}
-
-// DatesResponse is full response received from API.
-type DatesResponse struct {
-	Status string       `json:"status"`
-	Data   []TimeWindow `json:"data"`
-}
 
 func main() {
 	apiKey := os.Getenv("TELEGRAM_API_KEY")
@@ -104,7 +90,7 @@ func trackOnce(bot *bots.Bot, path, location string) {
 		log.Warnw("Error reading first bytes", "err", err)
 		return
 	}
-	var datesResponse DatesResponse
+	var datesResponse domain.DatesResponse
 	if err := json.NewDecoder(resp.Body).Decode(&datesResponse); err != nil {
 		log.Infow("Error decoding", "err", err)
 		return
@@ -112,20 +98,33 @@ func trackOnce(bot *bots.Bot, path, location string) {
 	if len(datesResponse.Data) > 0 {
 		firstAvailableWindow := datesResponse.Data[0]
 		log.Debugw("Windows available!", "count", len(datesResponse.Data))
-		msgText := fmt.Sprintf(
-			"A slot is available at %s on %s at %s and %d more.",
-			db.LocationToName[location],
-			firstAvailableWindow.Date,
-			firstAvailableWindow.StartTime,
-			len(datesResponse.Data)-1,
-		)
-		db.LocationToChats[location].ForEach(func(chatID int64) {
-			_, err := bot.API.Send(tg.NewMessage(chatID, msgText)) // TODO Should we delete a subscriber after update?
-			if err != nil {
-				log.Warnw("Failed to send notification", "chat", chatID)
+		db.LocationToChats[location].ForEach(func(subscription domain.Subscription) {
+			if subscription.Matches(datesResponse.Data[0]) {
+				count := countAdditionalWindows(subscription, datesResponse)
+				msgText := fmt.Sprintf(
+					"A slot is available at %s on %s at %s and %d more.",
+					db.LocationToName[location],
+					firstAvailableWindow.Date,
+					firstAvailableWindow.StartTime,
+					count,
+				)
+				_, err := bot.API.Send(tg.NewMessage(int64(subscription.ChatID), msgText))
+				if err != nil {
+					log.Warnw("Failed to send notification", "chat", subscription)
+				}
 			}
 		})
 	}
+}
+
+func countAdditionalWindows(subscription domain.Subscription, datesResponse domain.DatesResponse) int64 {
+	var count int64
+	for _, window := range datesResponse.Data[1:] {
+		if subscription.Matches(window) {
+			count++
+		}
+	}
+	return count
 }
 
 func setUpdateIntervalFromEnv() {

@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 )
@@ -59,20 +60,31 @@ func main() {
 	}()
 
 	// Start tracking all available locations
-	for k := range db.LocationToChats {
-		go track(k, bot)
+	var wg sync.WaitGroup
+	for location := range db.LocationToChats {
+		wg.Add(1)
+		go func(location string) {
+			defer wg.Done()
+			track(ctx, location, bot)
+		}(location)
 	}
 	bot.Run() // blocks until done
+	wg.Wait()
 	log.Info("Exiting")
 }
 
-func track(location string, botAPI *bots.Bot) {
+func track(ctx context.Context, location string, botAPI *bots.Bot) {
+	log := log.With("location", location)
 	path := fmt.Sprintf(INDApiPath, location)
 	ticker := time.NewTicker(interval)
 	for {
-		<-ticker.C
-		trackOnce(botAPI, path, location)
-		// TODO add graceful shutdown
+		select {
+		case <-ctx.Done():
+			log.Info("Stopped tracking")
+			return
+		case <-ticker.C:
+			trackOnce(botAPI, path, location)
+		}
 	}
 }
 

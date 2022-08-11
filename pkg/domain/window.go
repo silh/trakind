@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"errors"
 	"strings"
 	"time"
 )
@@ -22,6 +23,19 @@ func (r *WindowDate) UnmarshalJSON(bytes []byte) error {
 	}
 	*r = WindowDate(date)
 	return nil
+}
+
+func (r WindowDate) MarshalJSON() ([]byte, error) {
+	t := time.Time(r)
+	if y := t.Year(); y < 0 || y >= 10000 {
+		return nil, errors.New("Time.MarshalJSON: year outside of range [0,9999]")
+	}
+
+	b := make([]byte, 0, len(TimeFormat)+2)
+	b = append(b, '"')
+	b = t.AppendFormat(b, TimeFormat)
+	b = append(b, '"')
+	return b, nil
 }
 
 func (r WindowDate) String() string {

@@ -11,11 +11,11 @@ run:
 
 .PHONY: deploy
 deploy:
-	scp ./bot ec2-user@$(INSTANCE):/home/ec2-user/bot
+	scp ./bot ec2-user@$(INSTANCE):/home/ec2-user/ind/bot
 
 .PHONY: deploy_all
 deploy_all: deploy
-	scp ./scripts/ind_start.sh ./scripts/ind_stop.sh  ec2-user@$(INSTANCE):/home/ec2-user/
+	scp ./scripts/start.sh ./scripts/stop.sh  ec2-user@$(INSTANCE):/home/ec2-user/ind/
 
 .PHONY: fmt
 fmt:

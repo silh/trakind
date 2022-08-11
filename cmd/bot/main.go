@@ -8,7 +8,7 @@ import (
 	"github.com/silh/trakind/pkg/bots"
 	"github.com/silh/trakind/pkg/db"
 	"github.com/silh/trakind/pkg/domain"
-	"github.com/silh/trakind/pkg/logger"
+	"github.com/silh/trakind/pkg/loggers"
 	"io"
 	"net/http"
 	"os"
@@ -21,7 +21,7 @@ import (
 // INDApiPath TODO only documents pick up is supported for 3 people.
 const INDApiPath = "https://oap.ind.nl/oap/api/desks/%s/slots/?productKey=DOC&persons=3"
 
-var log = logger.Logger()
+var log = loggers.Logger()
 
 var interval = 1 * time.Minute
 
@@ -47,7 +47,7 @@ func main() {
 
 	// Start tracking all available locations
 	var wg sync.WaitGroup
-	for location := range db.LocationToChats {
+	for location := range db.LocationToName {
 		wg.Add(1)
 		go func(location string) {
 			defer wg.Done()
@@ -98,7 +98,12 @@ func trackOnce(bot *bots.Bot, path, location string) {
 	if len(datesResponse.Data) > 0 {
 		firstAvailableWindow := datesResponse.Data[0]
 		log.Debugw("Windows available!", "count", len(datesResponse.Data))
-		db.LocationToChats[location].ForEach(func(subscription domain.Subscription) {
+		subscriptions, err := db.Subs.GetForLocation(location)
+		if err != nil {
+			log.Warnw("Could not retrieve subscriptions", "err", err)
+			return
+		}
+		for _, subscription := range subscriptions {
 			if subscription.Matches(datesResponse.Data[0]) {
 				count := countAdditionalWindows(subscription, datesResponse)
 				msgText := fmt.Sprintf(
@@ -113,7 +118,7 @@ func trackOnce(bot *bots.Bot, path, location string) {
 					log.Warnw("Failed to send notification", "chat", subscription)
 				}
 			}
-		})
+		}
 	}
 }
 

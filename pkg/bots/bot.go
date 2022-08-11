@@ -4,13 +4,13 @@ import (
 	tg "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/silh/trakind/pkg/db"
 	"github.com/silh/trakind/pkg/domain"
-	"github.com/silh/trakind/pkg/logger"
+	"github.com/silh/trakind/pkg/loggers"
 	"go.uber.org/zap"
 	"strings"
 	"time"
 )
 
-var log = logger.Logger()
+var log = loggers.Logger()
 
 type SubscribersDB interface {
 	Add(location string, chatID domain.ChatID)
@@ -66,7 +66,7 @@ func (b *Bot) Run() {
 				continue
 			}
 			location := strings.ToUpper(args[0])
-			if _, ok := db.LocationToChats[location]; ok {
+			if _, ok := db.LocationToName[location]; ok {
 				subscription := domain.Subscription{
 					ChatID: domain.ChatID(chatID),
 				}
@@ -82,7 +82,10 @@ func (b *Bot) Run() {
 					}
 					subscription.TrackBefore = domain.WindowDate(date)
 				}
-				db.LocationToChats[location].Add(subscription)
+				if err := db.Subs.AddToLocation(location, subscription); err != nil {
+					log.Warnw("Failed to store new subscription", "err", err)
+					continue
+				}
 				msgText := "You will now get a notification when an open time window" +
 					" found for the location " + db.LocationToName[location]
 				if (subscription.TrackBefore != domain.WindowDate{}) {
@@ -102,16 +105,19 @@ func (b *Bot) Run() {
 				log,
 			)
 		} else if command == "stoptrack" {
-			for k := range db.LocationToChats {
+			for location := range db.LocationToName {
 				// TODO this should be improved
-				toDelete := make([]domain.Subscription, 0)
-				db.LocationToChats[k].ForEach(func(item domain.Subscription) {
-					if item.ChatID == domain.ChatID(chatID) {
-						toDelete = append(toDelete, item)
+				subscriptions, err := db.Subs.GetForLocation(location)
+				if err != nil {
+					log.Warnw("Failed to get subscriptions for delete", "err", err)
+					continue
+				}
+				for _, subscription := range subscriptions {
+					if subscription.ChatID == domain.ChatID(chatID) {
+						if err := db.Subs.RemoveFromLocation(location, subscription); err != nil {
+							log.Warnw("Failed to delete subscription", "err", err)
+						}
 					}
-				})
-				for _, subscription := range toDelete {
-					db.LocationToChats[k].Remove(subscription)
 				}
 			}
 			b.sendAndForget(

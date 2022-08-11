@@ -4,8 +4,9 @@ type ChatID int64
 
 // Subscription to new available TimeWindows.
 type Subscription struct {
-	ChatID      ChatID
-	TrackBefore WindowDate // This is a workaround for us to use Subscription as comparable.
+	ChatID ChatID `json:"chatID"`
+	// This is a workaround for us to use Subscription as comparable.
+	TrackBefore WindowDate `json:"trackBefore"`
 }
 
 // Matches returns true if Subscription matches given TimeWindow.

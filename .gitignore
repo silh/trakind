@@ -2,3 +2,4 @@
 .env
 /bot
 instance_name
+/db

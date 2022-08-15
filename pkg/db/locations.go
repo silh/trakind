@@ -11,19 +11,10 @@ var log = loggers.Logger()
 
 const locationsBucket = "locations"
 
-var db *nutsdb.DB
-
-var Subs *SubscriptionsDB
+var Subscriptions *SubscriptionsDB
 
 func init() {
-	opt := nutsdb.DefaultOptions
-	opt.Dir = "./db"
-	var err error
-	db, err = nutsdb.Open(opt)
-	if err != nil {
-		log.Fatal("Failed to open DB", "err", err)
-	}
-	Subs = &SubscriptionsDB{storage: db}
+	Subscriptions = &SubscriptionsDB{storage: db}
 }
 
 type SubscriptionsDB struct {
@@ -56,8 +47,12 @@ func (db *SubscriptionsDB) GetForLocation(location string) ([]domain.Subscriptio
 	var result []domain.Subscription
 	return result, db.storage.View(func(tx *nutsdb.Tx) error {
 		locationKey := []byte(location)
-		if ok, err := tx.SHasKey(locationsBucket, locationKey); !ok {
-			return err // might be nil, we don't really care
+		ok, err := tx.SHasKey(locationsBucket, locationKey)
+		if !ok || err == nutsdb.ErrBucketNotFound {
+			return nil
+		}
+		if err != nil {
+			return err
 		}
 		list, err := tx.SMembers(locationsBucket, locationKey)
 		if err != nil {

@@ -98,7 +98,7 @@ func trackOnce(bot *bots.Bot, path, location string) {
 	if len(datesResponse.Data) > 0 {
 		firstAvailableWindow := datesResponse.Data[0]
 		log.Debugw("Windows available!", "count", len(datesResponse.Data))
-		subscriptions, err := db.Subs.GetForLocation(location)
+		subscriptions, err := db.Subscriptions.GetForLocation(location)
 		if err != nil {
 			log.Warnw("Could not retrieve subscriptions", "err", err)
 			return

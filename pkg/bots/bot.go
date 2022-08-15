@@ -2,25 +2,23 @@ package bots
 
 import (
 	tg "github.com/go-telegram-bot-api/telegram-bot-api/v5"
-	"github.com/silh/trakind/pkg/db"
 	"github.com/silh/trakind/pkg/domain"
 	"github.com/silh/trakind/pkg/loggers"
 	"go.uber.org/zap"
-	"strings"
-	"time"
 )
 
 var log = loggers.Logger()
 
+// SubscribersDB TODO not used, should be moved
 type SubscribersDB interface {
-	Add(location string, chatID domain.ChatID)
+	AddToLocation(location string, subscription domain.Subscription) error
+	RemoveFromLocation(location string, subscription domain.Subscription) error
+	GetForLocation(location string) ([]domain.Subscription, error)
 }
 
 type Bot struct {
-	API           *tg.BotAPI // FIXME should not expose that
-	subscribersDB SubscribersDB
-
-	openChatCount uint64 // TODO this should survive restarts. And everything else should as well :D
+	API      *tg.BotAPI // FIXME should not expose that
+	commands map[string]func(*Bot, *tg.Message) Command
 }
 
 func New(apiKey string) (*Bot, error) {
@@ -29,8 +27,13 @@ func New(apiKey string) (*Bot, error) {
 		return nil, err
 	}
 	return &Bot{
-		API:           api,
-		subscribersDB: nil,
+		API: api,
+		commands: map[string]func(*Bot, *tg.Message) Command{
+			"start":     func(*Bot, *tg.Message) Command { return NewStartCommand() },
+			"stop":      func(*Bot, *tg.Message) Command { return NewStopCommand() },
+			"track":     func(bot *Bot, msg *tg.Message) Command { return NewTrackCommand(bot, msg) },
+			"stoptrack": func(bot *Bot, msg *tg.Message) Command { return NewStopTrackCommand(bot, msg) },
+		},
 	}, nil
 }
 
@@ -46,91 +49,9 @@ func (b *Bot) Run() {
 		if msg == nil || !msg.IsCommand() {
 			continue
 		}
-		chatID := update.FromChat().ID
-		log := log.With("chat", chatID)
-		log.Infow("New command", "resp", msg.Text)
-		command := msg.Command()
-		args := strings.Split(msg.CommandArguments(), " ")
-		if command == "track" {
-			if len(args) == 0 {
-				// TODO track all????
-				log.Warn("Requested to track all locations. Not supported")
-				b.sendAndForget(
-					tg.NewMessage(
-						chatID,
-						"Tracking all locations is not supported at the moment, please specify a location to track",
-					),
-					"warning",
-					log,
-				)
-				continue
-			}
-			location := strings.ToUpper(args[0])
-			if _, ok := db.LocationToName[location]; ok {
-				subscription := domain.Subscription{
-					ChatID: domain.ChatID(chatID),
-				}
-				if len(args) > 1 {
-					date, err := time.Parse(domain.TimeFormat, args[1])
-					if err != nil {
-						b.sendAndForget(
-							tg.NewMessage(chatID, "Date has incorrect format, please use YYYY-MM-DD"),
-							"message about incorrect date",
-							log,
-						)
-						continue
-					}
-					subscription.TrackBefore = domain.WindowDate(date)
-				}
-				if err := db.Subs.AddToLocation(location, subscription); err != nil {
-					log.Warnw("Failed to store new subscription", "err", err)
-					continue
-				}
-				msgText := "You will now get a notification when an open time window" +
-					" found for the location " + db.LocationToName[location]
-				if (subscription.TrackBefore != domain.WindowDate{}) {
-					msgText += " that happens before " + subscription.TrackBefore.String()
-				}
-				b.sendAndForget(
-					tg.NewMessage(chatID, msgText),
-					"subsription notification",
-					log,
-				)
-				log.Infow("New follower", "location", location)
-				continue
-			}
-			b.sendAndForget(
-				tg.NewMessage(chatID, "Unsupported location - "+location),
-				"incorrect location message",
-				log,
-			)
-		} else if command == "stoptrack" {
-			for location := range db.LocationToName {
-				// TODO this should be improved
-				subscriptions, err := db.Subs.GetForLocation(location)
-				if err != nil {
-					log.Warnw("Failed to get subscriptions for delete", "err", err)
-					continue
-				}
-				for _, subscription := range subscriptions {
-					if subscription.ChatID == domain.ChatID(chatID) {
-						if err := db.Subs.RemoveFromLocation(location, subscription); err != nil {
-							log.Warnw("Failed to delete subscription", "err", err)
-						}
-					}
-				}
-			}
-			b.sendAndForget(
-				tg.NewMessage(chatID, "You won't receive new notifications."),
-				"unsubsribption notification",
-				log,
-			)
-		} else if command == "start" {
-			b.openChatCount++
-			log.Info("New user", "count", b.openChatCount)
-		} else if command == "stop" {
-			b.openChatCount--
-			log.Info("User left", "count", b.openChatCount)
+		log.Infow("New command", "text", msg.Text, "chat", msg.Chat.ID)
+		if cmdConstructor, ok := b.commands[msg.Command()]; ok {
+			_ = cmdConstructor(b, msg).Execute() // TODO doesn't return any errors at the moment
 		}
 	}
 }

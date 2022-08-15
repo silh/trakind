@@ -43,7 +43,7 @@ func (db *UsersCounterDB) add(value int64) {
 			log.Errorw("Users counter cannot be parsed", "err", err)
 			return nil
 		}
-		if counter > 0 { // we have
+		if counter > 0 && value < 0 { // we have
 			counter += value
 		}
 		if err = tx.Put(usersBucket, usersCounterKey, []byte(strconv.FormatInt(counter, 10)), TTLInfinite); err != nil {

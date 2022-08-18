@@ -43,7 +43,6 @@ func (b *Bot) Run() {
 	u := tg.NewUpdate(0)
 	u.Timeout = 5
 	updatesC := b.API.GetUpdatesChan(u)
-	// TODO improve that...
 	for update := range updatesC {
 		msg := update.Message
 		if msg == nil || !msg.IsCommand() {
@@ -87,8 +86,8 @@ func (b *Bot) registerCommands() {
 }
 
 // sendAndForget sends message and logs error if it occurs.
-func (b *Bot) sendAndForget(msg tg.MessageConfig, msgType string, log *zap.SugaredLogger) {
+func (b *Bot) sendAndForget(msg tg.MessageConfig, text string, log *zap.SugaredLogger) {
 	if _, err := b.API.Send(msg); err != nil {
-		log.Warnw("Failed to send "+msgType, "err", err)
+		log.Warnw("Failed to send notification", "err", err, "text", text)
 	}
 }

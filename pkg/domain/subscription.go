@@ -7,6 +7,7 @@ type Subscription struct {
 	ChatID ChatID `json:"chatID"`
 	// This is a workaround for us to use Subscription as comparable.
 	TrackBefore WindowDate `json:"trackBefore"`
+	PeopleCount int        `json:"peopleCount"`
 }
 
 // Matches returns true if Subscription matches given TimeWindow.

@@ -77,3 +77,10 @@ var LocationToName = map[string]string{
 	"ZW": "IND Zwolle",
 	"DB": "IND Den Bosch",
 }
+
+var NameToLocation = map[string]string{
+	"IND Amsterdam": "AM",
+	"IND Den Haag":  "DH",
+	"IND Zwolle":    "ZW",
+	"IND Den Bosch": "DB",
+}

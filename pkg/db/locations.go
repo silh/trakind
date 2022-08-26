@@ -13,8 +13,31 @@ const locationsBucket = "locations"
 
 var Subscriptions *SubscriptionsDB
 
+type Location struct {
+	Name string
+	Code string
+}
+
+var Locations = []Location{
+	{Name: "IND Amsterdam", Code: "AM"},
+	{Name: "IND Den Haag", Code: "DH"},
+	{Name: "IND Zwolle", Code: "ZW"},
+	{Name: "IND Den Bosch", Code: "DB"},
+}
+
+// LocationToName location code to a proper name.
+var LocationToName = map[string]string{}
+
+// NameToLocation reverse of LocationToName.
+var NameToLocation = map[string]string{}
+
 func init() {
 	Subscriptions = &SubscriptionsDB{storage: db}
+
+	for _, location := range Locations {
+		LocationToName[location.Code] = location.Name
+		NameToLocation[location.Name] = location.Code
+	}
 }
 
 type SubscriptionsDB struct {
@@ -68,19 +91,4 @@ func (db *SubscriptionsDB) GetForLocation(location string) ([]domain.Subscriptio
 		}
 		return nil
 	})
-}
-
-// LocationToName location code to a proper name.
-var LocationToName = map[string]string{
-	"AM": "IND Amsterdam",
-	"DH": "IND Den Haag",
-	"ZW": "IND Zwolle",
-	"DB": "IND Den Bosch",
-}
-
-var NameToLocation = map[string]string{
-	"IND Amsterdam": "AM",
-	"IND Den Haag":  "DH",
-	"IND Zwolle":    "ZW",
-	"IND Den Bosch": "DB",
 }

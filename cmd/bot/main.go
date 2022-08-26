@@ -123,6 +123,7 @@ func trackOnce(bot *bots.Bot, path, location string) {
 }
 
 func countAdditionalWindows(subscription domain.Subscription, datesResponse domain.DatesResponse) int64 {
+	// TODO this can be improved as dates are ordered
 	var count int64
 	for _, window := range datesResponse.Data[1:] {
 		if subscription.Matches(window) {

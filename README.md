@@ -35,7 +35,7 @@ You will be prompted to select one of the available locations:
 
 And number of people - 1 to 6.
 Optionally if you are only interested in time windows before particular date you can specify it in YYYY-MM-DD
-format (not implemented yet).
+format.
 
 After that you will receive notifications about open windows with mention of the first available window and number of
 other possible options. Notifications do not start after the first one and might repeat the same information.

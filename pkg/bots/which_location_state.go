@@ -9,41 +9,46 @@ import (
 type WhichLocationState struct {
 }
 
-func (w *WhichLocationState) String() string {
+func (s *WhichLocationState) String() string {
 	return "WhichLocationState"
 }
 
-func (w *WhichLocationState) To(fsm *FSM, msg *tg.Message, bot *Bot) {
+func (s *WhichLocationState) To(fsm *FSM, msg *tg.Message, bot *Bot) {
 	toSend := newMessage(fsm.chatID, "Which location?")
-	toSend.ReplyMarkup = makeWhichLocationReplyMarkup()
+	toSend.ReplyMarkup = s.makeReplyKeyboard()
 	if _, err := bot.API.Send(toSend); err != nil {
 		fsm.log.Warnw("Failed to send message", "msg", toSend.Text, "err", err)
 		fsm.To(doneState, msg)
 	}
 }
 
-func (w *WhichLocationState) Do(fsm *FSM, msg *tg.Message, bot *Bot) error {
+func (s *WhichLocationState) Do(fsm *FSM, msg *tg.Message, bot *Bot) error {
 	if msg.IsCommand() {
 		fsm.To(commandHandlingState, msg)
 		return nil
 	}
-	if location, ok := db.NameToLocation[msg.Text]; ok {
-		fsm.To(&HowManyPeopleState{location: location}, msg)
+	location, ok := db.NameToLocation[msg.Text] // TODO should be more tolerable to case.
+	if !ok {
+		toSend := newMessage(
+			fsm.chatID,
+			fmt.Sprintf(
+				"Location %s is incorrect, please click on a button with one of the available locations.",
+				msg.Text,
+			),
+		)
+		toSend.ReplyMarkup = s.makeReplyKeyboard()
+		if _, err := bot.API.Send(toSend); err != nil {
+			fsm.log.Warnw("Failed to send message", "msg", toSend.Text, "err", err)
+			fsm.To(doneState, msg)
+		}
 		return nil
 	}
-	toSend := newMessage(
-		fsm.chatID,
-		fmt.Sprintf("Locations %s is incorrect, please select click on a button with one of the available locations.", msg.Text),
-	)
-	toSend.ReplyMarkup = makeWhichLocationReplyMarkup()
-	if _, err := bot.API.Send(toSend); err != nil {
-		fsm.log.Warnw("Failed to send message", "msg", toSend.Text, "err", err)
-		fsm.To(doneState, msg)
-	}
+	nextState := &HowManyPeopleState{location: location}
+	fsm.To(nextState, msg)
 	return nil
 }
 
-func makeWhichLocationReplyMarkup() tg.ReplyKeyboardMarkup {
+func (s *WhichLocationState) makeReplyKeyboard() tg.ReplyKeyboardMarkup {
 	rows := make([][]tg.KeyboardButton, 0, len(db.LocationToName)/2)
 	row := make([]tg.KeyboardButton, 0, 2)
 	for i, location := range db.Locations {

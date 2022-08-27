@@ -24,7 +24,7 @@ func (s *CommandHandlingState) To(fsm *FSM, msg *tg.Message, bot *Bot) {
 		fsm.chatID,
 		fmt.Sprintf("No such command %q, please select one of the available commands", msg.Command()),
 	)
-	bot.sendAndForget(reply, fsm.log)
+	bot.SendAndForget(reply, fsm.log)
 	fsm.To(doneState, msg) // Just to not store it in memory indefinably
 }
 

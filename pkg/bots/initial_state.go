@@ -20,7 +20,7 @@ func (s *InitialState) To(*FSM, *tg.Message, *Bot) {
 func (s *InitialState) Do(fsm *FSM, msg *tg.Message, bot *Bot) error {
 	if msg == nil || !msg.IsCommand() {
 		reply := newMessage(fsm.chatID, "Please select a command")
-		bot.sendAndForget(reply, fsm.log)
+		bot.SendAndForget(reply, fsm.log)
 		fsm.To(doneState, msg)
 		return nil
 	}

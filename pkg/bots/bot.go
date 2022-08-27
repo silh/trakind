@@ -80,8 +80,8 @@ func (b *Bot) registerCommands() {
 	log.Infow("Commands registration successful")
 }
 
-// sendAndForget sends message and logs error if it occurs.
-func (b *Bot) sendAndForget(msg tg.MessageConfig, log *zap.SugaredLogger) {
+// SendAndForget sends message and logs error if it occurs.
+func (b *Bot) SendAndForget(msg tg.MessageConfig, log *zap.SugaredLogger) {
 	if _, err := b.API.Send(msg); err != nil {
 		log.Warnw("Failed to send notification", "err", err, "text", msg.Text)
 	}

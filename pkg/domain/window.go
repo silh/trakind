@@ -61,3 +61,8 @@ type DatesResponse struct {
 	Status string       `json:"status"`
 	Data   []TimeWindow `json:"data"`
 }
+
+func ParseWindowDate(value string) (WindowDate, error) {
+	date, err := time.Parse(TimeFormat, value)
+	return WindowDate(date), err
+}

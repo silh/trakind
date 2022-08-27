@@ -95,28 +95,29 @@ func trackOnce(bot *bots.Bot, path, location string) {
 		log.Infow("Error decoding", "err", err)
 		return
 	}
-	if len(datesResponse.Data) > 0 {
-		firstAvailableWindow := datesResponse.Data[0]
-		log.Debugw("Windows available!", "count", len(datesResponse.Data))
-		subscriptions, err := db.Subscriptions.GetForLocation(location)
-		if err != nil {
-			log.Warnw("Could not retrieve subscriptions", "err", err)
-			return
-		}
-		for _, subscription := range subscriptions {
-			if subscription.Matches(datesResponse.Data[0]) {
-				count := countAdditionalWindows(subscription, datesResponse)
-				msgText := fmt.Sprintf(
-					"A slot is available at %s on %s at %s and %d more.",
-					db.LocationToName[location],
-					firstAvailableWindow.Date,
-					firstAvailableWindow.StartTime,
-					count,
-				)
-				_, err := bot.API.Send(tg.NewMessage(int64(subscription.ChatID), msgText))
-				if err != nil {
-					log.Warnw("Failed to send notification", "chat", subscription)
-				}
+	if len(datesResponse.Data) == 0 {
+		return
+	}
+	firstAvailableWindow := datesResponse.Data[0]
+	log.Debugw("Windows available!", "count", len(datesResponse.Data))
+	subscriptions, err := db.Subscriptions.GetForLocation(location)
+	if err != nil {
+		log.Warnw("Could not retrieve subscriptions", "err", err)
+		return
+	}
+	for _, subscription := range subscriptions {
+		if subscription.Matches(datesResponse.Data[0]) {
+			count := countAdditionalWindows(subscription, datesResponse)
+			msgText := fmt.Sprintf(
+				"A slot is available at %s on %s at %s and %d more.",
+				db.LocationToName[location],
+				firstAvailableWindow.Date,
+				firstAvailableWindow.StartTime,
+				count,
+			)
+			_, err := bot.API.Send(tg.NewMessage(int64(subscription.ChatID), msgText))
+			if err != nil {
+				log.Warnw("Failed to send notification", "chat", subscription)
 			}
 		}
 	}

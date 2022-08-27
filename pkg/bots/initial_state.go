@@ -14,7 +14,7 @@ func (s *InitialState) String() string {
 }
 
 func (s *InitialState) To(*FSM, *tg.Message, *Bot) {
-	panic(errors.New("should not be called")) // TODO or should it?
+	panic(errors.New("should not be called"))
 }
 
 func (s *InitialState) Do(fsm *FSM, msg *tg.Message, bot *Bot) error {

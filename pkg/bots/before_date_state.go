@@ -75,7 +75,7 @@ func (s *BeforeDateState) sendSubscribedNotification(fsm *FSM, subscription doma
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf(
 		"You will now get a notification when an open time window found for the location %s for %d people",
-		s.location,
+		db.LocationToName[s.location],
 		s.peopleCount,
 	))
 	if (subscription.TrackBefore != domain.WindowDate{}) {

@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sort"
 	"sync"
 	"syscall"
 	"time"
@@ -123,15 +124,13 @@ func trackOnce(bot *bots.Bot, path, location string) {
 	}
 }
 
-func countAdditionalWindows(subscription domain.Subscription, datesResponse domain.DatesResponse) int64 {
-	// TODO this can be improved as dates are ordered
-	var count int64
-	for _, window := range datesResponse.Data[1:] {
-		if subscription.Matches(window) {
-			count++
-		}
-	}
-	return count
+// countAdditionalWindows checks how many windows besides the first one match the subscription.
+func countAdditionalWindows(subscription domain.Subscription, datesResponse domain.DatesResponse) int {
+	otherDates := datesResponse.Data[1:]
+	// time windows are ordered in the response, so we just need to find the first window that doesn't match
+	return sort.Search(len(otherDates), func(i int) bool {
+		return !subscription.Matches(otherDates[i])
+	})
 }
 
 func setUpdateIntervalFromEnv() {

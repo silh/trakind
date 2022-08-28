@@ -8,8 +8,6 @@ var log = loggers.Logger()
 
 const locationsBucket = "locations"
 
-var Subscriptions *SubscriptionsDB
-
 type Location struct {
 	Name string
 	Code string

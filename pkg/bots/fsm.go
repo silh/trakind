@@ -40,12 +40,7 @@ type State interface {
 	Do(fsm *FSM, msg *tg.Message, bot *Bot) error // TODO maybe return new state at the end?
 }
 
-var initialState = &InitialState{commands: map[string]State{
-	"start":     startCommandState,
-	"stop":      stopCommandState,
-	"track":     whichLocationState,
-	"stoptrack": stopTrackCommandState,
-}}
+var initialState = &InitialState{}
 var commandHandlingState = &CommandHandlingState{commands: map[string]State{
 	"start":     startCommandState,
 	"stop":      stopCommandState,

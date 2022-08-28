@@ -6,7 +6,6 @@ import (
 )
 
 type InitialState struct {
-	commands map[string]State
 }
 
 func (s *InitialState) String() string {

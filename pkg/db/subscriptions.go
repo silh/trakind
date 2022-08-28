@@ -6,6 +6,8 @@ import (
 	"github.com/xujiajun/nutsdb"
 )
 
+var Subscriptions *SubscriptionsDB
+
 func init() {
 	Subscriptions = &SubscriptionsDB{storage: db}
 }

@@ -13,13 +13,11 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sort"
 	"sync"
 	"syscall"
 	"time"
 )
-
-// INDApiPath TODO only documents pick up is supported for 3 people.
-const INDApiPath = "https://oap.ind.nl/oap/api/desks/%s/slots/?productKey=DOC&persons=3"
 
 var log = loggers.Logger()
 
@@ -31,6 +29,7 @@ func main() {
 		log.Fatal("TELEGRAM_API_KEY env variable must be set")
 	}
 	setUpdateIntervalFromEnv()
+	migrateSubscriptions() // temporary step
 
 	bot, err := bots.New(apiKey)
 	if err != nil {
@@ -46,22 +45,27 @@ func main() {
 	}()
 
 	// Start tracking all available locations
+	// Also track for different number of people because calculating it locally somehow doesn't produce the same result
 	var wg sync.WaitGroup
 	for location := range db.LocationToName {
-		wg.Add(1)
-		go func(location string) {
-			defer wg.Done()
-			track(ctx, location, bot)
-		}(location)
+		for i := 1; i <= 6; i++ {
+			wg.Add(1)
+			go func(location string, peopleCount int) {
+				defer wg.Done()
+				track(ctx, location, peopleCount, bot)
+			}(location, i)
+		}
 	}
 	bot.Run() // blocks until done
 	wg.Wait()
 	log.Info("Exiting")
 }
 
-func track(ctx context.Context, location string, botAPI *bots.Bot) {
+func track(ctx context.Context, location string, peopleCount int, botAPI *bots.Bot) {
 	log := log.With("location", location)
-	path := fmt.Sprintf(INDApiPath, location)
+	// TODO only documents pick up is supported.
+	const INDApiPath = "https://oap.ind.nl/oap/api/desks/%s/slots/?productKey=DOC&persons=%d"
+	path := fmt.Sprintf(INDApiPath, location, peopleCount)
 	ticker := time.NewTicker(interval)
 	for {
 		select {
@@ -76,60 +80,65 @@ func track(ctx context.Context, location string, botAPI *bots.Bot) {
 
 func trackOnce(bot *bots.Bot, path, location string) {
 	log := log.With("location", location)
-	resp, err := http.Get(path)
+	datesResponse, err := getDates(path)
 	if err != nil {
-		log.Warnw("Could not fetch", "err", err)
+		log.Warnw("Error fetching dates", "err", err)
 		return
 	}
-	defer resp.Body.Close()
-	// response has prefix )]}',\n
-	// we need to discard that
-	var n int64 = 6
-	_, err = io.CopyN(io.Discard, resp.Body, n)
+	windows := datesResponse.Data
+	if len(windows) == 0 {
+		return
+	}
+	log.Debugw("Windows available!", "count", len(windows))
+	subscriptions, err := db.Subscriptions.GetForLocation(location)
 	if err != nil {
-		log.Warnw("Error reading first bytes", "err", err)
+		log.Warnw("Could not retrieve subscriptions", "err", err)
 		return
 	}
-	var datesResponse domain.DatesResponse
-	if err := json.NewDecoder(resp.Body).Decode(&datesResponse); err != nil {
-		log.Infow("Error decoding", "err", err)
-		return
-	}
-	if len(datesResponse.Data) > 0 {
-		firstAvailableWindow := datesResponse.Data[0]
-		log.Debugw("Windows available!", "count", len(datesResponse.Data))
-		subscriptions, err := db.Subscriptions.GetForLocation(location)
-		if err != nil {
-			log.Warnw("Could not retrieve subscriptions", "err", err)
-			return
-		}
-		for _, subscription := range subscriptions {
-			if subscription.Matches(datesResponse.Data[0]) {
-				count := countAdditionalWindows(subscription, datesResponse)
-				msgText := fmt.Sprintf(
-					"A slot is available at %s on %s at %s and %d more.",
-					db.LocationToName[location],
-					firstAvailableWindow.Date,
-					firstAvailableWindow.StartTime,
-					count,
-				)
-				_, err := bot.API.Send(tg.NewMessage(int64(subscription.ChatID), msgText))
-				if err != nil {
-					log.Warnw("Failed to send notification", "chat", subscription)
-				}
+	firstAvailableWindow := windows[0]
+	for _, subscription := range subscriptions {
+		// we only need to check the first one as it's the earliest
+		if subscription.Matches(firstAvailableWindow) {
+			msgText := fmt.Sprintf(
+				"A slot is available at %s on %s at %s and %d more.",
+				db.LocationToName[location],
+				&firstAvailableWindow.Date,
+				&firstAvailableWindow.StartTime,
+				countAdditionalWindows(subscription, windows),
+			)
+			if _, err := bot.API.Send(tg.NewMessage(int64(subscription.ChatID), msgText)); err != nil {
+				log.Warnw("Failed to send notification", "chat", subscription.ChatID)
 			}
 		}
 	}
 }
 
-func countAdditionalWindows(subscription domain.Subscription, datesResponse domain.DatesResponse) int64 {
-	var count int64
-	for _, window := range datesResponse.Data[1:] {
-		if subscription.Matches(window) {
-			count++
-		}
+func getDates(path string) (domain.DatesResponse, error) {
+	resp, err := http.Get(path)
+	if err != nil {
+		return domain.DatesResponse{}, fmt.Errorf("could not fetch: %w", err)
 	}
-	return count
+	defer resp.Body.Close()
+	// response has prefix )]}',\n
+	// we need to discard that
+	const bytesToDiscard int64 = 6
+	if _, err = io.CopyN(io.Discard, resp.Body, bytesToDiscard); err != nil {
+		return domain.DatesResponse{}, fmt.Errorf("error reading first bytes: %w", err)
+	}
+	var datesResponse domain.DatesResponse
+	if err := json.NewDecoder(resp.Body).Decode(&datesResponse); err != nil {
+		return domain.DatesResponse{}, fmt.Errorf("error decoding: %w", err)
+	}
+	return datesResponse, nil
+}
+
+// countAdditionalWindows checks how many windows besides the first one match the subscription.
+func countAdditionalWindows(subscription domain.Subscription, windows []domain.TimeWindow) int {
+	otherDates := windows[1:]
+	// time windows are ordered in the response, so we just need to find the first window that doesn't match
+	return sort.Search(len(otherDates), func(i int) bool {
+		return !subscription.Matches(otherDates[i])
+	})
 }
 
 func setUpdateIntervalFromEnv() {
@@ -140,6 +149,30 @@ func setUpdateIntervalFromEnv() {
 			interval = duration
 		} else {
 			log.Warnw("Could not parse duration from env UPDATE_INTERVAL", "err", err)
+		}
+	}
+}
+
+func migrateSubscriptions() {
+	for _, location := range db.Locations {
+		subscriptions, err := db.Subscriptions.GetForLocation(location.Code)
+		if err != nil {
+			panic(err)
+		}
+		for _, subscription := range subscriptions {
+			if subscription.PeopleCount == 0 {
+				subscriptionCopy := domain.Subscription{
+					ChatID:      subscription.ChatID,
+					TrackBefore: subscription.TrackBefore,
+					PeopleCount: 1,
+				}
+				if err := db.Subscriptions.RemoveFromLocation(location.Code, subscription); err != nil {
+					panic(err)
+				}
+				if err := db.Subscriptions.AddToLocation(location.Code, subscriptionCopy); err != nil {
+					panic(err)
+				}
+			}
 		}
 	}
 }

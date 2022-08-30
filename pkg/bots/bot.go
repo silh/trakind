@@ -9,6 +9,8 @@ import (
 
 var log = loggers.Logger()
 
+var chatFSMs = map[domain.ChatID]*FSM{}
+
 // SubscribersDB TODO not used, should be moved
 type SubscribersDB interface {
 	AddToLocation(location string, subscription domain.Subscription) error
@@ -17,8 +19,7 @@ type SubscribersDB interface {
 }
 
 type Bot struct {
-	API      *tg.BotAPI // FIXME should not expose that
-	commands map[string]func(*Bot, *tg.Message) Command
+	API *tg.BotAPI // FIXME should not expose that
 }
 
 func New(apiKey string) (*Bot, error) {
@@ -28,12 +29,6 @@ func New(apiKey string) (*Bot, error) {
 	}
 	return &Bot{
 		API: api,
-		commands: map[string]func(*Bot, *tg.Message) Command{
-			"start":     func(*Bot, *tg.Message) Command { return NewStartCommand() },
-			"stop":      func(*Bot, *tg.Message) Command { return NewStopCommand() },
-			"track":     func(bot *Bot, msg *tg.Message) Command { return NewTrackCommand(bot, msg) },
-			"stoptrack": func(bot *Bot, msg *tg.Message) Command { return NewStopTrackCommand(bot, msg) },
-		},
 	}, nil
 }
 
@@ -45,13 +40,16 @@ func (b *Bot) Run() {
 	updatesC := b.API.GetUpdatesChan(u)
 	for update := range updatesC {
 		msg := update.Message
-		if msg == nil || !msg.IsCommand() {
+		if msg == nil {
 			continue
 		}
-		log.Infow("New command", "text", msg.Text, "chat", msg.Chat.ID)
-		if cmdConstructor, ok := b.commands[msg.Command()]; ok {
-			_ = cmdConstructor(b, msg).Execute() // TODO doesn't return any errors at the moment
+		chatID := domain.ChatID(msg.Chat.ID)
+		fsm := chatFSMs[chatID]
+		if fsm == nil {
+			fsm = NewFSM(chatID, b)
+			chatFSMs[chatID] = fsm
 		}
+		fsm.Do(msg)
 	}
 }
 
@@ -64,11 +62,8 @@ func (b *Bot) Stop() {
 func (b *Bot) registerCommands() {
 	commands := tg.NewSetMyCommands(
 		tg.BotCommand{
-			Command: "track",
-			Description: "Specify IND location to track for available timeslots - AM (for Amsterdam), " +
-				"DH (for Den Haag), ZW (for Zwolle), DB (for Den Dosch). " +
-				"Optionally you can specify the date as YYYY-MM-DD, then you will only get notified about " +
-				"time windows before that date.",
+			Command:     "track",
+			Description: "Start tracking new location",
 		},
 		tg.BotCommand{
 			Command:     "stoptrack",
@@ -85,9 +80,9 @@ func (b *Bot) registerCommands() {
 	log.Infow("Commands registration successful")
 }
 
-// sendAndForget sends message and logs error if it occurs.
-func (b *Bot) sendAndForget(msg tg.MessageConfig, text string, log *zap.SugaredLogger) {
+// SendAndForget sends message and logs error if it occurs.
+func (b *Bot) SendAndForget(msg tg.MessageConfig, log *zap.SugaredLogger) {
 	if _, err := b.API.Send(msg); err != nil {
-		log.Warnw("Failed to send notification", "err", err, "text", text)
+		log.Warnw("Failed to send notification", "err", err, "text", msg.Text)
 	}
 }

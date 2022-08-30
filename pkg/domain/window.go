@@ -6,13 +6,56 @@ import (
 	"time"
 )
 
-// TimeFormat is default format that is returned by the server.
-var TimeFormat = "2006-01-02"
+// DateFormat is default format that is returned by the server.
+var DateFormat = "2006-01-02"
+var TimeFormat = "15:04"
 
-// WindowDate is used to parse the date format used by
-type WindowDate time.Time
+// Date is used to parse the date format used by
+type Date time.Time
 
-func (r *WindowDate) UnmarshalJSON(bytes []byte) error {
+func (d *Date) UnmarshalJSON(bytes []byte) error {
+	if string(bytes) == "null" {
+		return nil
+	}
+	s := strings.ReplaceAll(string(bytes), "\"", "")
+	date, err := time.Parse(DateFormat, s)
+	if err != nil {
+		return err
+	}
+	*d = Date(date)
+	return nil
+}
+
+func (d *Date) MarshalJSON() ([]byte, error) {
+	t := time.Time(*d)
+	if y := t.Year(); y < 0 || y >= 10000 {
+		return nil, errors.New("Time.MarshalJSON: year outside of range [0,9999]")
+	}
+
+	b := make([]byte, 0, len(DateFormat)+2)
+	b = append(b, '"')
+	b = t.AppendFormat(b, DateFormat)
+	b = append(b, '"')
+	return b, nil
+}
+
+func (d *Date) String() string {
+	date := time.Time(*d)
+	return date.Format(DateFormat)
+}
+
+func (d *Date) Before(another Date) bool {
+	return time.Time(another).Before(time.Time(*d))
+}
+
+type TimeOfDay time.Time
+
+func (t *TimeOfDay) String() string {
+	date := time.Time(*t)
+	return date.Format(TimeFormat)
+}
+
+func (t *TimeOfDay) UnmarshalJSON(bytes []byte) error {
 	if string(bytes) == "null" {
 		return nil
 	}
@@ -21,39 +64,26 @@ func (r *WindowDate) UnmarshalJSON(bytes []byte) error {
 	if err != nil {
 		return err
 	}
-	*r = WindowDate(date)
+	*t = TimeOfDay(date)
 	return nil
 }
 
-func (r WindowDate) MarshalJSON() ([]byte, error) {
-	t := time.Time(r)
-	if y := t.Year(); y < 0 || y >= 10000 {
-		return nil, errors.New("Time.MarshalJSON: year outside of range [0,9999]")
-	}
-
+func (t *TimeOfDay) MarshalJSON() ([]byte, error) {
+	stdTime := time.Time(*t)
 	b := make([]byte, 0, len(TimeFormat)+2)
 	b = append(b, '"')
-	b = t.AppendFormat(b, TimeFormat)
+	b = stdTime.AppendFormat(b, TimeFormat)
 	b = append(b, '"')
 	return b, nil
 }
 
-func (r WindowDate) String() string {
-	date := time.Time(r)
-	return date.Format(TimeFormat)
-}
-
-func (r WindowDate) Before(another WindowDate) bool {
-	return time.Time(another).Before(time.Time(r))
-}
-
 // TimeWindow describes one time open window in IND schedule.
 type TimeWindow struct {
-	Key       string     `json:"key"`
-	Date      WindowDate `json:"date"`
-	StartTime string     `json:"startTime"`
-	EndTime   string     `json:"endTime"`
-	Parts     int        `json:"parts"`
+	//Key       string    `json:"key"`
+	Date      Date      `json:"date"`
+	StartTime TimeOfDay `json:"startTime"`
+	EndTime   TimeOfDay `json:"endTime"`
+	Parts     int       `json:"parts"` // number of people
 }
 
 // DatesResponse is full response received from API.
@@ -62,7 +92,7 @@ type DatesResponse struct {
 	Data   []TimeWindow `json:"data"`
 }
 
-func ParseWindowDate(value string) (WindowDate, error) {
-	date, err := time.Parse(TimeFormat, value)
-	return WindowDate(date), err
+func ParseWindowDate(value string) (Date, error) {
+	date, err := time.Parse(DateFormat, value)
+	return Date(date), err
 }

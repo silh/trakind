@@ -42,6 +42,7 @@ func (s *BeforeDateState) Do(fsm *FSM, msg *tg.Message, bot *Bot) error {
 	if !strings.EqualFold(msg.Text, "all") {
 		subscription.TrackBefore, err = domain.ParseWindowDate(msg.Text)
 		if err != nil {
+			fsm.log.Debugw("Could not parse windowDate", "err", err)
 			toSend := newMessage(
 				fsm.chatID,
 				fmt.Sprintf(
@@ -78,8 +79,8 @@ func (s *BeforeDateState) sendSubscribedNotification(fsm *FSM, subscription doma
 		db.LocationToName[s.location],
 		s.peopleCount,
 	))
-	if (subscription.TrackBefore != domain.WindowDate{}) {
-		sb.WriteString(fmt.Sprintf(" before %s", subscription.TrackBefore))
+	if (subscription.TrackBefore != domain.Date{}) {
+		sb.WriteString(fmt.Sprintf(" before %s", &subscription.TrackBefore))
 	}
 	sb.WriteRune('.')
 	toSend := newMessage(fsm.chatID, sb.String())

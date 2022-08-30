@@ -3,13 +3,14 @@ package bots
 import (
 	"fmt"
 	tg "github.com/go-telegram-bot-api/telegram-bot-api/v5"
+	"github.com/silh/trakind/pkg/domain"
 	"strconv"
 )
 
 // Those are the limits specified on website
 const (
 	minPeople = 1
-	maxPeople = 6
+	maxPeople = domain.MaxPeopleCount
 )
 
 type HowManyPeopleState struct {

@@ -25,7 +25,7 @@ func NewFSM(chatID domain.ChatID, bot *Bot) *FSM {
 }
 
 func (fsm *FSM) To(newState State, msg *tg.Message) {
-	fsm.log.Infow("State transition", "from", fsm.state, "to", newState)
+	fsm.log.Debugw("State transition", "from", fsm.state, "to", newState)
 	fsm.state = newState
 	fsm.state.To(fsm, msg, fsm.bot)
 }

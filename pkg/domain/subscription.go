@@ -15,5 +15,5 @@ type Subscription struct {
 // Matches returns true if Subscription matches given TimeWindow.
 func (s *Subscription) Matches(window TimeWindow) bool {
 	return s.PeopleCount == window.Parts &&
-		s.TrackBefore == Date{} || s.TrackBefore.Before(window.Date)
+		(s.TrackBefore == Date{} || s.TrackBefore.Before(window.Date))
 }

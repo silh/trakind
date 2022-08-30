@@ -53,5 +53,7 @@ func (db *UsersCounterDB) add(value int64) {
 		log.Info("New user", "count", counter) // TODO this should be moved to bot? or command?
 		return nil
 	})
-	log.Errorw("Unexpected adjusting users counter error", "value", value, "err", err)
+	if err != nil {
+		log.Errorw("Error adjusting users counter", "value", value, "err", err)
+	}
 }

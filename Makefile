@@ -24,3 +24,7 @@ fmt:
 .PHONY: vet
 vet:
 	@go vet $(GO_PACKAGES)
+
+.PHONY: docker
+docker:
+	@docker build -t indbot .

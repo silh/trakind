@@ -29,7 +29,6 @@ func main() {
 		log.Fatal("TELEGRAM_API_KEY env variable must be set")
 	}
 	setUpdateIntervalFromEnv()
-	migrateSubscriptions() // temporary step
 
 	bot, err := bots.New(apiKey)
 	if err != nil {
@@ -56,13 +55,14 @@ func main() {
 			}(location, i)
 		}
 	}
+	go reportNumberOfSubscriptions(ctx)
 	bot.Run() // blocks until done
 	wg.Wait()
 	log.Info("Exiting")
 }
 
 func track(ctx context.Context, location string, peopleCount int, botAPI *bots.Bot) {
-	log := log.With("location", location)
+	log := log.With("location", location, "peopleCount", peopleCount)
 	// TODO only documents pick up is supported.
 	const INDApiPath = "https://oap.ind.nl/oap/api/desks/%s/slots/?productKey=DOC&persons=%d"
 	path := fmt.Sprintf(INDApiPath, location, peopleCount)
@@ -153,26 +153,30 @@ func setUpdateIntervalFromEnv() {
 	}
 }
 
-func migrateSubscriptions() {
-	for _, location := range db.Locations {
-		subscriptions, err := db.Subscriptions.GetForLocation(location.Code)
-		if err != nil {
-			panic(err)
-		}
-		for _, subscription := range subscriptions {
-			if subscription.PeopleCount == 0 {
-				subscriptionCopy := domain.Subscription{
-					ChatID:      subscription.ChatID,
-					TrackBefore: subscription.TrackBefore,
-					PeopleCount: 1,
-				}
-				if err := db.Subscriptions.RemoveFromLocation(location.Code, subscription); err != nil {
-					panic(err)
-				}
-				if err := db.Subscriptions.AddToLocation(location.Code, subscriptionCopy); err != nil {
-					panic(err)
-				}
+// reportNumberOfSubscriptions periodically prints number of subscriptions per location. Has infinite cycle until passed
+// context is Done.
+func reportNumberOfSubscriptions(ctx context.Context) {
+	ticker := time.NewTicker(1 * time.Hour)
+	defer ticker.Stop()
+	for {
+		report := make(map[string]int)
+		total := 0
+		for _, location := range db.Locations {
+			countForLocation, err := db.Subscriptions.CountForLocation(location.Code)
+			if err != nil {
+				log.Warnw("Failed to get count", "location", location, "err", err)
+				continue
 			}
+			report[location.Code] = countForLocation
+			total += countForLocation
+		}
+		report["total"] = total
+		log.Infow("Subscription report", "report", report)
+		select {
+		case <-ticker.C:
+			// do nothing
+		case <-ctx.Done():
+			return
 		}
 	}
 }

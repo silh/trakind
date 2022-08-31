@@ -64,3 +64,20 @@ func (db *SubscriptionsDB) GetForLocation(location string) ([]domain.Subscriptio
 		return nil
 	})
 }
+
+// CountForLocation returns number of subscribers for a location.
+func (db *SubscriptionsDB) CountForLocation(location string) (int, error) {
+	var result int
+	return result, db.storage.View(func(tx *nutsdb.Tx) error {
+		locationKey := []byte(location)
+		ok, err := tx.SHasKey(locationsBucket, locationKey)
+		if !ok || err == nutsdb.ErrBucketNotFound {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		result, err = tx.SCard(locationsBucket, locationKey)
+		return err
+	})
+}

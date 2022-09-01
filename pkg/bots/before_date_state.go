@@ -68,6 +68,7 @@ func (s *BeforeDateState) Do(fsm *FSM, msg *tg.Message, bot *Bot) error {
 		return nil
 	}
 	s.sendSubscribedNotification(fsm, subscription, bot)
+	fsm.log.Infow("One more follower", "location", s.location)
 	fsm.To(doneState, msg)
 	return nil
 }

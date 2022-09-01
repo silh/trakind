@@ -9,7 +9,7 @@ RUN GOOS=linux GOARCH=arm64 go build ./cmd/bot
 FROM alpine
 
 ENV TELEGRAM_API_KEY=""
-ENV UPDATE_INTERVAL="10s"
+ENV UPDATE_INTERVAL="1m"
 
 COPY --from=builder /app/bot /bot
 

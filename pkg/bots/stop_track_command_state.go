@@ -26,7 +26,7 @@ func (s StopTrackCommandState) To(fsm *FSM, msg *tg.Message, bot *Bot) {
 				if err := db.Subscriptions.RemoveFromLocation(location, subscription); err != nil {
 					fsm.log.Warnw("Failed to delete subscription", "subscription", subscription, "err", err)
 				} else {
-					fsm.log.Debugw("One less follower", "location", location)
+					fsm.log.Infow("One less follower", "location", location)
 				}
 			}
 		}

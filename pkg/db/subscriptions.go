@@ -54,8 +54,8 @@ func (db *SubscriptionsDB) GetForLocation(location string) ([]domain.Subscriptio
 			return err
 		}
 		result = make([]domain.Subscription, len(list))
-		var subscription domain.Subscription
 		for i, item := range list {
+			var subscription domain.Subscription
 			if err := json.Unmarshal(item, &subscription); err != nil {
 				return err
 			}

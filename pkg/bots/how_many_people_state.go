@@ -14,7 +14,7 @@ const (
 )
 
 type HowManyPeopleState struct {
-	location string
+	location domain.Location
 }
 
 func (s *HowManyPeopleState) String() string {

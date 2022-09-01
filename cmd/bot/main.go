@@ -47,10 +47,10 @@ func main() {
 	// Start tracking all available locations
 	// Also track for different number of people because calculating it locally somehow doesn't produce the same result
 	var wg sync.WaitGroup
-	for location := range db.LocationToName {
+	for _, location := range db.DocPickupLocations {
 		for i := 1; i <= 6; i++ {
 			wg.Add(1)
-			go func(location string, peopleCount int) {
+			go func(location domain.Location, peopleCount int) {
 				defer wg.Done()
 				track(ctx, location, peopleCount, bot)
 			}(location, i)
@@ -62,11 +62,11 @@ func main() {
 	log.Info("Exiting")
 }
 
-func track(ctx context.Context, location string, peopleCount int, botAPI *bots.Bot) {
-	log := log.With("location", location, "peopleCount", peopleCount)
+func track(ctx context.Context, location domain.Location, peopleCount int, botAPI *bots.Bot) {
+	log := log.With("location", location.Code, "peopleCount", peopleCount)
 	// TODO only documents pick up is supported.
 	const INDApiPath = "https://oap.ind.nl/oap/api/desks/%s/slots/?productKey=DOC&persons=%d"
-	path := fmt.Sprintf(INDApiPath, location, peopleCount)
+	path := fmt.Sprintf(INDApiPath, location.Code, peopleCount)
 	ticker := time.NewTicker(interval)
 	for {
 		select {
@@ -79,8 +79,8 @@ func track(ctx context.Context, location string, peopleCount int, botAPI *bots.B
 	}
 }
 
-func trackOnce(bot *bots.Bot, path, location string) {
-	log := log.With("location", location)
+func trackOnce(bot *bots.Bot, path string, location domain.Location) {
+	log := log.With("location", location.Code)
 	datesResponse, err := getDates(path)
 	if err != nil {
 		log.Warnw("Error fetching dates", "err", err)
@@ -91,7 +91,7 @@ func trackOnce(bot *bots.Bot, path, location string) {
 		return
 	}
 	log.Debugw("Windows available!", "count", len(windows))
-	subscriptions, err := db.Subscriptions.GetForLocation(location)
+	subscriptions, err := db.Subscriptions.GetForLocation(location.Code)
 	if err != nil {
 		log.Warnw("Could not retrieve subscriptions", "err", err)
 		return
@@ -102,7 +102,7 @@ func trackOnce(bot *bots.Bot, path, location string) {
 		if subscription.Matches(firstAvailableWindow) {
 			msgText := fmt.Sprintf(
 				"A slot is available at %s on %s at %s and %d more.",
-				db.LocationToName[location],
+				location.Name,
 				&firstAvailableWindow.Date,
 				&firstAvailableWindow.StartTime,
 				countAdditionalWindows(subscription, windows),
@@ -167,7 +167,7 @@ func reportNumberOfSubscriptions(ctx context.Context) {
 	for {
 		report := make(map[string]int)
 		total := 0
-		for _, location := range db.Locations {
+		for _, location := range db.DocPickupLocations {
 			countForLocation, err := db.Subscriptions.CountForLocation(location.Code)
 			if err != nil {
 				log.Warnw("Failed to get count", "location", location, "err", err)

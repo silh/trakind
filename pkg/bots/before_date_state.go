@@ -9,7 +9,7 @@ import (
 )
 
 type BeforeDateState struct {
-	location    string
+	location    domain.Location
 	peopleCount int
 }
 
@@ -58,7 +58,7 @@ func (s *BeforeDateState) Do(fsm *FSM, msg *tg.Message, bot *Bot) error {
 		}
 	}
 	// Actually save subscription
-	if err := db.Subscriptions.AddToLocation(s.location, subscription); err != nil {
+	if err := db.Subscriptions.AddToLocation(s.location.Code, subscription); err != nil {
 		fsm.log.Warnw("Failed to store subscription", "subscription", subscription, "err", err)
 		toSend := newMessage(fsm.chatID, "Failed to create subscription. Please try again.")
 		if _, err = bot.API.Send(toSend); err != nil {
@@ -68,7 +68,7 @@ func (s *BeforeDateState) Do(fsm *FSM, msg *tg.Message, bot *Bot) error {
 		return nil
 	}
 	s.sendSubscribedNotification(fsm, subscription, bot)
-	fsm.log.Infow("One more follower", "location", s.location)
+	fsm.log.Infow("One more follower", "location", s.location.Code)
 	fsm.To(doneState, msg)
 	return nil
 }
@@ -77,7 +77,7 @@ func (s *BeforeDateState) sendSubscribedNotification(fsm *FSM, subscription doma
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf(
 		"You will now get a notification when an open time window found for the location %s for %d people",
-		db.LocationToName[s.location],
+		s.location.Name,
 		s.peopleCount,
 	))
 	if (subscription.TrackBefore != domain.Date{}) {

@@ -14,16 +14,16 @@ func (s StopTrackCommandState) String() string {
 }
 
 func (s StopTrackCommandState) To(fsm *FSM, msg *tg.Message, bot *Bot) {
-	for location := range db.LocationToName {
+	for _, location := range db.DocPickupLocations {
 		// TODO this should be improved
-		subscriptions, err := db.Subscriptions.GetForLocation(location)
+		subscriptions, err := db.Subscriptions.GetForLocation(location.Code)
 		if err != nil {
 			fsm.log.Warnw("Failed to get subscriptions for delete", "location", location, "err", err)
 			continue
 		}
 		for _, subscription := range subscriptions {
 			if subscription.ChatID == fsm.chatID {
-				if err := db.Subscriptions.RemoveFromLocation(location, subscription); err != nil {
+				if err := db.Subscriptions.RemoveFromLocation(location.Code, subscription); err != nil {
 					fsm.log.Warnw("Failed to delete subscription", "subscription", subscription, "err", err)
 				} else {
 					fsm.log.Infow("One less follower", "location", location)

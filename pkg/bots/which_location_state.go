@@ -27,7 +27,7 @@ func (s *WhichLocationState) Do(fsm *FSM, msg *tg.Message, bot *Bot) error {
 		fsm.To(commandHandlingState, msg)
 		return nil
 	}
-	location, ok := db.NameToLocation[msg.Text] // TODO should be more tolerable to case.
+	location, ok := db.LocationForName(msg.Text)
 	if !ok {
 		toSend := newMessage(
 			fsm.chatID,
@@ -49,13 +49,13 @@ func (s *WhichLocationState) Do(fsm *FSM, msg *tg.Message, bot *Bot) error {
 }
 
 func (s *WhichLocationState) makeReplyKeyboard() tg.ReplyKeyboardMarkup {
-	rows := make([][]tg.KeyboardButton, 0, len(db.LocationToName)/2)
+	rows := make([][]tg.KeyboardButton, 0, len(db.DocPickupLocations)/2)
 	row := make([]tg.KeyboardButton, 0, 2)
-	for i, location := range db.Locations {
+	for i, location := range db.DocPickupLocations {
 		row = append(row, tg.NewKeyboardButton(location.Name))
 		if len(row) == 2 {
 			rows = append(rows, row)
-			if i < len(db.Locations)-1 {
+			if i < len(db.DocPickupLocations)-1 {
 				row = make([]tg.KeyboardButton, 0, 2)
 			}
 		}

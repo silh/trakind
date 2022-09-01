@@ -40,6 +40,18 @@ func (b *Bot) Run() {
 	updatesC := b.API.GetUpdatesChan(u)
 	for update := range updatesC {
 		msg := update.Message
+		// FIXME this is a WA, states should handle update instead of message
+		if update.MyChatMember != nil &&
+			update.MyChatMember.NewChatMember.WasKicked() {
+			chatID := domain.ChatID(update.MyChatMember.Chat.ID)
+			fsm := chatFSMs[chatID]
+			if fsm == nil {
+				fsm = NewFSM(chatID, b)
+				chatFSMs[chatID] = fsm
+			}
+			fsm.To(stopCommandState, nil)
+			continue
+		}
 		if msg == nil {
 			continue
 		}

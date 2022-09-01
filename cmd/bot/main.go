@@ -108,7 +108,7 @@ func trackOnce(bot *bots.Bot, path string, location domain.Location) {
 				countAdditionalWindows(subscription, windows),
 			)
 			if _, err := bot.API.Send(tg.NewMessage(int64(subscription.ChatID), msgText)); err != nil {
-				log.Warnw("Failed to send notification", "chat", subscription.ChatID)
+				log.Warnw("Failed to send notification", "chat", subscription.ChatID, "err", err)
 			}
 		}
 	}

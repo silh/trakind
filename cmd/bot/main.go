@@ -120,7 +120,7 @@ func migrateSubscriptions(bot *bots.Bot) {
 							"This chat is subscribed to notifications. Previously only Documents pickup was supported. "+
 								"Now it's possible to track Biometrics as well. If you are interested in Biometrics instead of "+
 								"Documents pickup, please recreate your subscription (/stoptrack and /track again). "+
-								"If Documents pickup is what you want, you don't need to do anything."),
+								"If Documents pickup is what you want, then you don't need to do anything."),
 					)
 					if err == nil {
 						notified[subscription.ChatID] = struct{}{}

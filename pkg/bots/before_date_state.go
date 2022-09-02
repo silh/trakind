@@ -9,6 +9,7 @@ import (
 )
 
 type BeforeDateState struct {
+	action      domain.Action
 	location    domain.Location
 	peopleCount int
 }
@@ -37,6 +38,7 @@ func (s *BeforeDateState) Do(fsm *FSM, msg *tg.Message, bot *Bot) error {
 	subscription := domain.Subscription{
 		ChatID:      fsm.chatID,
 		PeopleCount: s.peopleCount,
+		Action:      s.action.Code,
 	}
 	var err error
 	if !strings.EqualFold(msg.Text, "all") {
@@ -76,7 +78,8 @@ func (s *BeforeDateState) Do(fsm *FSM, msg *tg.Message, bot *Bot) error {
 func (s *BeforeDateState) sendSubscribedNotification(fsm *FSM, subscription domain.Subscription, bot *Bot) {
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf(
-		"You will now get a notification when an open time window found for the location %s for %d people",
+		"You will now get a notification when an open time window found for %s at the location %s for %d people",
+		s.action.Name,
 		s.location.Name,
 		s.peopleCount,
 	))

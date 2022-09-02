@@ -1,20 +1,15 @@
 package main
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	tg "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/silh/trakind/pkg/bots"
 	"github.com/silh/trakind/pkg/db"
 	"github.com/silh/trakind/pkg/domain"
 	"github.com/silh/trakind/pkg/loggers"
-	"io"
-	"net/http"
 	"os"
 	"os/signal"
-	"sort"
 	"sync"
 	"syscall"
 	"time"
@@ -35,6 +30,7 @@ func main() {
 	if err != nil {
 		log.Fatalw("Failed to create new bot API", "err", err)
 	}
+	migrateSubscriptions(bot)
 
 	ctx := context.Background()
 	ctx, stop := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
@@ -46,105 +42,24 @@ func main() {
 
 	// Start tracking all available locations
 	// Also track for different number of people because calculating it locally somehow doesn't produce the same result
+	// Also track different types of actions
 	var wg sync.WaitGroup
-	for _, location := range db.DocPickupLocations {
-		for i := 1; i <= 6; i++ {
-			wg.Add(1)
-			go func(location domain.Location, peopleCount int) {
-				defer wg.Done()
-				track(ctx, location, peopleCount, bot)
-			}(location, i)
+	for _, location := range db.Locations {
+		for peopleCount := 1; peopleCount <= 6; peopleCount++ {
+			for action := range location.AvailableActions {
+				wg.Add(1)
+				fetcher := bots.NewFetcher(location, action, peopleCount, interval, bot)
+				go func() {
+					defer wg.Done()
+					fetcher.Track(ctx)
+				}()
+			}
 		}
 	}
 	go reportNumberOfSubscriptions(ctx)
 	bot.Run() // blocks until done
 	wg.Wait()
 	log.Info("Exiting")
-}
-
-func track(ctx context.Context, location domain.Location, peopleCount int, botAPI *bots.Bot) {
-	log := log.With("location", location.Code, "peopleCount", peopleCount)
-	// TODO only documents pick up is supported.
-	const INDApiPath = "https://oap.ind.nl/oap/api/desks/%s/slots/?productKey=DOC&persons=%d"
-	path := fmt.Sprintf(INDApiPath, location.Code, peopleCount)
-	ticker := time.NewTicker(interval)
-	for {
-		select {
-		case <-ctx.Done():
-			log.Info("Stopped tracking")
-			return
-		case <-ticker.C:
-			trackOnce(botAPI, path, location)
-		}
-	}
-}
-
-func trackOnce(bot *bots.Bot, path string, location domain.Location) {
-	log := log.With("location", location.Code)
-	datesResponse, err := getDates(path)
-	if err != nil {
-		log.Warnw("Error fetching dates", "err", err)
-		return
-	}
-	windows := datesResponse.Data
-	if len(windows) == 0 {
-		return
-	}
-	log.Debugw("Windows available!", "count", len(windows))
-	subscriptions, err := db.Subscriptions.GetForLocation(location.Code)
-	if err != nil {
-		log.Warnw("Could not retrieve subscriptions", "err", err)
-		return
-	}
-	firstAvailableWindow := windows[0]
-	for _, subscription := range subscriptions {
-		// we only need to check the first one as it's the earliest
-		if subscription.Matches(firstAvailableWindow) {
-			msgText := fmt.Sprintf(
-				"A slot is available at %s on %s at %s and %d more.",
-				location.Name,
-				&firstAvailableWindow.Date,
-				&firstAvailableWindow.StartTime,
-				countAdditionalWindows(subscription, windows),
-			)
-			if _, err := bot.API.Send(tg.NewMessage(int64(subscription.ChatID), msgText)); err != nil {
-				log.Warnw("Failed to send notification", "chat", subscription.ChatID, "err", err)
-			}
-		}
-	}
-}
-
-func getDates(path string) (domain.DatesResponse, error) {
-	resp, err := http.Get(path)
-	if err != nil {
-		return domain.DatesResponse{}, fmt.Errorf("could not fetch: %w", err)
-	}
-	defer resp.Body.Close()
-	fullBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return domain.DatesResponse{}, fmt.Errorf("failed to read response: %w", err)
-	}
-	// response has prefix )]}',\n
-	// we need to discard that
-	const bytesToDiscard int64 = 6
-	bodyReader := bytes.NewReader(fullBody)
-	if _, err = io.CopyN(io.Discard, bodyReader, bytesToDiscard); err != nil {
-		return domain.DatesResponse{}, fmt.Errorf("failed to read first bytes: %w", err)
-	}
-	var datesResponse domain.DatesResponse
-	if err := json.NewDecoder(bodyReader).Decode(&datesResponse); err != nil {
-		return domain.DatesResponse{}, fmt.Errorf("failed decoding, full body=\"%s\": %w", string(fullBody), err)
-	}
-	return datesResponse, nil
-}
-
-// countAdditionalWindows checks how many windows besides the first one match the subscription.
-func countAdditionalWindows(subscription domain.Subscription, windows []domain.TimeWindow) int {
-	otherDates := windows[1:]
-	// time windows are ordered in the response, so we just need to find the first window that doesn't match
-	return sort.Search(len(otherDates), func(i int) bool {
-		return !subscription.Matches(otherDates[i])
-	})
 }
 
 func setUpdateIntervalFromEnv() {
@@ -160,14 +75,14 @@ func setUpdateIntervalFromEnv() {
 }
 
 // reportNumberOfSubscriptions periodically prints number of subscriptions per location. Has infinite cycle until passed
-// context is Done.
+// context is Done. Doesn't take into consideration the action type
 func reportNumberOfSubscriptions(ctx context.Context) {
 	ticker := time.NewTicker(1 * time.Hour)
 	defer ticker.Stop()
 	for {
 		report := make(map[string]int)
 		total := 0
-		for _, location := range db.DocPickupLocations {
+		for _, location := range db.Locations {
 			countForLocation, err := db.Subscriptions.CountForLocation(location.Code)
 			if err != nil {
 				log.Warnw("Failed to get count", "location", location, "err", err)
@@ -183,6 +98,45 @@ func reportNumberOfSubscriptions(ctx context.Context) {
 			// do nothing
 		case <-ctx.Done():
 			return
+		}
+	}
+}
+
+func migrateSubscriptions(bot *bots.Bot) {
+	for _, location := range db.Locations {
+		log := log.With("location", location.Code)
+		subscriptions, err := db.Subscriptions.GetForLocation(location.Code)
+		if err != nil {
+			log.Warnw("Failed to fetch subscriptions", "err", err)
+			continue
+		}
+		notified := make(map[domain.ChatID]struct{})
+		for _, subscription := range subscriptions {
+			if subscription.Action == "" {
+				if _, ok := notified[subscription.ChatID]; !ok {
+					_, err := bot.API.Send(
+						tg.NewMessage(
+							int64(subscription.ChatID),
+							"This chat is subscribed to notifications. Previously only Documents pickup was supported. "+
+								"Now it's possible to track Biometrics as well. If you are interested in Biometrics instead of "+
+								"Documents pickup, please recreate your subscription (/stoptrack and /track again). "+
+								"If Documents pickup is what you want, you don't need to do anything."),
+					)
+					if err == nil {
+						notified[subscription.ChatID] = struct{}{}
+					} else {
+						log.Warnw("Failed to send notification", "chat", subscription.ChatID, "err", err)
+					}
+				}
+				log.Infow("Updating old subscription", "subscription", fmt.Sprintf("%#v", subscription))
+				if err := db.Subscriptions.RemoveFromLocation(location.Code, subscription); err != nil {
+					log.Errorw("Failed to delete subscription", "subscription", fmt.Sprintf("%#v", subscription))
+				}
+				subscription.Action = domain.DocumentPickup.Code
+				if err := db.Subscriptions.AddToLocation(location.Code, subscription); err != nil {
+					log.Errorw("Failed to add subscription back", "subscription", fmt.Sprintf("%#v", subscription))
+				}
+			}
 		}
 	}
 }

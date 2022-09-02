@@ -14,7 +14,7 @@ func (s StopTrackCommandState) String() string {
 }
 
 func (s StopTrackCommandState) To(fsm *FSM, msg *tg.Message, bot *Bot) {
-	for _, location := range db.DocPickupLocations {
+	for _, location := range db.Locations {
 		// TODO this should be improved
 		subscriptions, err := db.Subscriptions.GetForLocation(location.Code)
 		if err != nil {
@@ -26,7 +26,7 @@ func (s StopTrackCommandState) To(fsm *FSM, msg *tg.Message, bot *Bot) {
 				if err := db.Subscriptions.RemoveFromLocation(location.Code, subscription); err != nil {
 					fsm.log.Warnw("Failed to delete subscription", "subscription", subscription, "err", err)
 				} else {
-					fsm.log.Infow("One less follower", "location", location)
+					fsm.log.Infow("One less follower", "location", location.Code)
 				}
 			}
 		}

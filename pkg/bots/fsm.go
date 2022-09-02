@@ -44,13 +44,13 @@ var initialState = &InitialState{}
 var commandHandlingState = &CommandHandlingState{commands: map[string]State{
 	"start":     startCommandState,
 	"stop":      stopCommandState,
-	"track":     whichLocationState,
+	"track":     whichActionState,
 	"stoptrack": stopTrackCommandState,
 }}
 var startCommandState = &StartCommandState{}
 var stopCommandState = &StopCommandState{}
 var doneState = &DoneState{}
-var whichLocationState = &WhichLocationState{}
+var whichActionState = &WhichActionState{}
 var stopTrackCommandState = &StopTrackCommandState{}
 
 func newMessage(chatId domain.ChatID, text string) tg.MessageConfig {

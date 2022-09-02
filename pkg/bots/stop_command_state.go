@@ -14,7 +14,7 @@ func (s StopCommandState) String() string {
 }
 
 func (s StopCommandState) To(fsm *FSM, _ *tg.Message, _ *Bot) {
-	for _, location := range db.DocPickupLocations {
+	for _, location := range db.Locations {
 		subscriptions, err := db.Subscriptions.GetForLocation(location.Code)
 		if err != nil {
 			fsm.log.Warnw("Failed to get subscriptions", "location", location.Code, "err", err)

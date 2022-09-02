@@ -14,6 +14,7 @@ const (
 )
 
 type HowManyPeopleState struct {
+	action   domain.Action
 	location domain.Location
 }
 
@@ -45,7 +46,7 @@ func (s *HowManyPeopleState) Do(fsm *FSM, msg *tg.Message, bot *Bot) error {
 		}
 		return nil
 	}
-	nextState := &BeforeDateState{location: s.location, peopleCount: peopleCount}
+	nextState := &BeforeDateState{action: s.action, location: s.location, peopleCount: peopleCount}
 	fsm.To(nextState, msg)
 	return nil
 }

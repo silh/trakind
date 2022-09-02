@@ -4,9 +4,11 @@ import (
 	"fmt"
 	tg "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/silh/trakind/pkg/db"
+	"github.com/silh/trakind/pkg/domain"
 )
 
 type WhichLocationState struct {
+	action domain.Action
 }
 
 func (s *WhichLocationState) String() string {
@@ -43,19 +45,19 @@ func (s *WhichLocationState) Do(fsm *FSM, msg *tg.Message, bot *Bot) error {
 		}
 		return nil
 	}
-	nextState := &HowManyPeopleState{location: location}
+	nextState := &HowManyPeopleState{action: s.action, location: location}
 	fsm.To(nextState, msg)
 	return nil
 }
 
 func (s *WhichLocationState) makeReplyKeyboard() tg.ReplyKeyboardMarkup {
-	rows := make([][]tg.KeyboardButton, 0, len(db.DocPickupLocations)/2)
+	rows := make([][]tg.KeyboardButton, 0, len(db.Locations)/2)
 	row := make([]tg.KeyboardButton, 0, 2)
-	for i, location := range db.DocPickupLocations {
+	for i, location := range db.Locations {
 		row = append(row, tg.NewKeyboardButton(location.Name))
 		if len(row) == 2 {
 			rows = append(rows, row)
-			if i < len(db.DocPickupLocations)-1 {
+			if i < len(db.Locations)-1 {
 				row = make([]tg.KeyboardButton, 0, 2)
 			}
 		}

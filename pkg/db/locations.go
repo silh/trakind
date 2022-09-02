@@ -43,3 +43,13 @@ func LocationForName(name string) (domain.Location, bool) {
 	}
 	return domain.Location{}, false
 }
+
+func LocationsForAction(action domain.Action) []domain.Location {
+	locations := make([]domain.Location, 0)
+	for _, location := range Locations {
+		if _, ok := location.AvailableActions[action]; ok {
+			locations = append(locations, location)
+		}
+	}
+	return locations
+}

@@ -51,13 +51,14 @@ func (s *WhichLocationState) Do(fsm *FSM, msg *tg.Message, bot *Bot) error {
 }
 
 func (s *WhichLocationState) makeReplyKeyboard() tg.ReplyKeyboardMarkup {
-	rows := make([][]tg.KeyboardButton, 0, len(db.Locations)/2)
+	locations := db.LocationsForAction(s.action)
+	rows := make([][]tg.KeyboardButton, 0, len(locations)/2)
 	row := make([]tg.KeyboardButton, 0, 2)
-	for i, location := range db.Locations {
+	for i, location := range locations {
 		row = append(row, tg.NewKeyboardButton(location.Name))
 		if len(row) == 2 {
 			rows = append(rows, row)
-			if i < len(db.Locations)-1 {
+			if i < len(locations)-1 {
 				row = make([]tg.KeyboardButton, 0, 2)
 			}
 		}

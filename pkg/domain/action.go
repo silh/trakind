@@ -6,6 +6,6 @@ type Action struct {
 }
 
 var (
-	DocumentPickup = Action{Name: "Document pickup", Code: "DOC"}
+	DocumentPickup = Action{Name: "Documents pickup", Code: "DOC"}
 	Biometrics     = Action{Name: "Biometrics", Code: "BIO"}
 )

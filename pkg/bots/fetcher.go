@@ -1,7 +1,6 @@
 package bots
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -119,20 +118,18 @@ func (f *Fetcher) getDates(path string) (domain.DatesResponse, error) {
 		return domain.DatesResponse{}, fmt.Errorf("could not fetch: %w", err)
 	}
 	defer resp.Body.Close()
-	fullBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return domain.DatesResponse{}, fmt.Errorf("failed to read response: %w", err)
+	if resp.StatusCode >= 400 {
+		return domain.DatesResponse{}, fmt.Errorf("incorrect status code: %d (%s)", resp.StatusCode, resp.Status)
 	}
 	// response has prefix )]}',\n
 	// we need to discard that
 	const bytesToDiscard int64 = 6
-	bodyReader := bytes.NewReader(fullBody)
-	if _, err = io.CopyN(io.Discard, bodyReader, bytesToDiscard); err != nil {
+	if _, err = io.CopyN(io.Discard, resp.Body, bytesToDiscard); err != nil {
 		return domain.DatesResponse{}, fmt.Errorf("failed to read first bytes: %w", err)
 	}
 	var datesResponse domain.DatesResponse
-	if err := json.NewDecoder(bodyReader).Decode(&datesResponse); err != nil {
-		return domain.DatesResponse{}, fmt.Errorf("failed decoding, full body=\"%s\": %w", string(fullBody), err)
+	if err := json.NewDecoder(resp.Body).Decode(&datesResponse); err != nil {
+		return domain.DatesResponse{}, fmt.Errorf("failed decoding: %w", err)
 	}
 	return datesResponse, nil
 }

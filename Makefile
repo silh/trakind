@@ -1,3 +1,4 @@
+REMOTE_USER ?= $(shell whoami)
 INSTANCE ?= $(shell cat instance_name)
 GO_PACKAGES := $(shell go list ./...)
 
@@ -11,11 +12,11 @@ run:
 
 .PHONY: deploy
 deploy:
-	scp ./bot ec2-user@$(INSTANCE):/home/ec2-user/ind/bot
+	scp ./bot $(INSTANCE):/home/$(REMOTE_USER)/ind/bot
 
 .PHONY: deploy_all
 deploy_all: deploy
-	scp ./scripts/start.sh ./scripts/stop.sh  ec2-user@$(INSTANCE):/home/ec2-user/ind/
+	scp ./scripts/start.sh ./scripts/stop.sh $(INSTANCE):/home/$(REMOTE_USER)/ind/
 
 .PHONY: fmt
 fmt:

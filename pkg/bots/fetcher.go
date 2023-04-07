@@ -88,6 +88,14 @@ func (f *Fetcher) trackOnce() {
 			)
 			if _, err := f.bot.API.Send(tg.NewMessage(int64(subscription.ChatID), msgText)); err != nil {
 				log.Warnw("Failed to send notification", "chat", subscription.ChatID, "err", err)
+				// Remove subscription if user is deactivated
+				if respErr, ok := err.(tg.Error); ok && respErr.Code == 403 && respErr.Message == "Forbidden: user is deactivated" {
+					if err := db.Subscriptions.RemoveFromLocation(f.location.Code, subscription); err != nil {
+						log.Warnw("Failed to delete subscription", "chat", subscription.ChatID, "err", err)
+					} else {
+						log.Infow("Deleted subscription for inactive user", "chat", subscription.ChatID)
+					}
+				}
 			}
 		}
 	}

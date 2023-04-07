@@ -16,32 +16,32 @@ type SubscriptionsDB struct {
 	storage *nutsdb.DB
 }
 
-func (db *SubscriptionsDB) AddToLocation(location string, subscription domain.Subscription) error {
+func (db *SubscriptionsDB) AddToLocation(locationCode string, subscription domain.Subscription) error {
 	return db.storage.Update(func(tx *nutsdb.Tx) error {
 		data, err := json.Marshal(&subscription)
 		if err != nil {
 			return err
 		}
-		return tx.SAdd(locationsBucket, []byte(location), data)
+		return tx.SAdd(locationsBucket, []byte(locationCode), data)
 	})
 }
 
-func (db *SubscriptionsDB) RemoveFromLocation(location string, subscription domain.Subscription) error {
+func (db *SubscriptionsDB) RemoveFromLocation(locationCode string, subscription domain.Subscription) error {
 	return db.storage.Update(func(tx *nutsdb.Tx) error {
 		value, err := json.Marshal(&subscription)
 		if err != nil {
 			return err
 		}
-		return tx.SRem(locationsBucket, []byte(location), value)
+		return tx.SRem(locationsBucket, []byte(locationCode), value)
 	})
 }
 
 // GetForLocation returns a list of subscriptions for given location.
 // We don't expect that many of them, should be fine keeping all in-memory.
-func (db *SubscriptionsDB) GetForLocation(location string) ([]domain.Subscription, error) {
+func (db *SubscriptionsDB) GetForLocation(locationCode string) ([]domain.Subscription, error) {
 	var result []domain.Subscription
 	return result, db.storage.View(func(tx *nutsdb.Tx) error {
-		locationKey := []byte(location)
+		locationKey := []byte(locationCode)
 		ok, err := tx.SHasKey(locationsBucket, locationKey)
 		if !ok || err == nutsdb.ErrBucketNotFound {
 			return nil
@@ -66,10 +66,10 @@ func (db *SubscriptionsDB) GetForLocation(location string) ([]domain.Subscriptio
 }
 
 // CountForLocation returns number of subscribers for a location.
-func (db *SubscriptionsDB) CountForLocation(location string) (int, error) {
+func (db *SubscriptionsDB) CountForLocation(locationCode string) (int, error) {
 	var result int
 	return result, db.storage.View(func(tx *nutsdb.Tx) error {
-		locationKey := []byte(location)
+		locationKey := []byte(locationCode)
 		ok, err := tx.SHasKey(locationsBucket, locationKey)
 		if !ok || err == nutsdb.ErrBucketNotFound {
 			return nil

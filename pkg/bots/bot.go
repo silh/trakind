@@ -95,6 +95,7 @@ func (b *Bot) registerCommands() {
 // SendAndForget sends message and logs error if it occurs.
 func (b *Bot) SendAndForget(msg tg.MessageConfig, log *zap.SugaredLogger) {
 	if _, err := b.API.Send(msg); err != nil {
+		// TODO probably need to handle unavailable users here as well
 		log.Warnw("Failed to send notification", "err", err, "text", msg.Text)
 	}
 }

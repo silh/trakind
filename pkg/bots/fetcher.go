@@ -34,7 +34,7 @@ func NewFetcher(
 	interval time.Duration,
 	bot *Bot,
 ) *Fetcher {
-	const INDApiPath = "https://oap.ind.nl/oap/api/desks/%s/slots/?productKey=%s&persons=%d"
+	const INDApiPath = "https://oap.ind.nl/oap/api/desks/%s/slots?productKey=%s&persons=%d"
 	return &Fetcher{
 		path:        fmt.Sprintf(INDApiPath, location.Code, action.Code, peopleCount),
 		location:    location,
